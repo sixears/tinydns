@@ -324,9 +324,13 @@ addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, 
 
 ----------------------------------------
 
-type Domain = Text
-addAliasCmd ∷ AbsFile → AbsFile → Domain → Host → CmdSpec
-addAliasCmd fn tmpfn d h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", d, toText $ ipv4 h ]
+addAliasCmd ∷ AbsFile → AbsFile → FQDN → Host → CmdSpec
+addAliasCmd fn tmpfn fqdn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText fqdn, toText $ ipv4 h ]
+
+----------------------------------------
+
+addMxCmd ∷ AbsFile → AbsFile → Host → CmdSpec
+addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "mx", toText (fqdn h), toText $ ipv4 h ]
 
 ----------------------------------------
 
@@ -363,7 +367,12 @@ __mkData__ hs (fn1,_) (fn2,_) = do
 
   case forM (unSHMap $ aliases hs) ( \ h → maybeE h (lookupHost hs h) ) of
     Left  h → die (ExitFailure 3) h
-    Right as → mapM_ runProc $ foldrWithKey ( \ u h a → addAliasCmd fn1 fn2 (toText u ⊕ "." ⊕ domains !! 0) h : a) [] as
+    Right as → mapM_ runProc $ foldrWithKey ( \ u h a → addAliasCmd fn1 fn2 (FQDN (toText u ⊕ "." ⊕ domains !! 0)) h : a) [] as
+
+  case forM (( \ h → (h,lookupHost hs h)) ⊳ mail_servers hs) ( \ (hn,mh) → maybeE hn mh) of
+    Left  h → die (ExitFailure 3) h
+    Right as → mapM_ runProc $ ( addMxCmd fn1 fn2 ) ⊳ as
+
 
   TextIO.readFile (toString fn1) ≫ TextIO.putStrLn
 
