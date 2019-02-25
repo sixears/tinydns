@@ -28,3 +28,5 @@ default.nix.bak
 data
 data.cdb
 sixears-hosts.yaml
+sixears-hosts.dhall
+HostsType

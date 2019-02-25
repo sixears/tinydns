@@ -82,11 +82,11 @@ import Fluffy.MonadError     ( splitMError )
 import Fluffy.MonadError.IO  ( asIOError )
 import Fluffy.MonadIO        ( MonadIO, liftIO, unlink )
 import Fluffy.MonadIO.Error  ( eitherIOThrow )
-import Fluffy.MonadIO2       ( die )
+import Fluffy.MonadIO2       ( die, dieUsage )
 import Fluffy.Options        ( optParser )
 import Fluffy.Parsec         ( Parsecable( parser ) )
 import Fluffy.Path           ( AbsDir, AbsFile, AsPathError, RelFile
-                             , getCwd_, parseFile' )
+                             , extension, getCwd_, parseFile' )
 import Fluffy.Path2          ( )
 import Fluffy.Printable      ( __ERR, q )
 import Fluffy.TempFile2      ( pc, with2TempFiles' )
@@ -149,6 +149,10 @@ import Data.Text     ( Text
 -- text-printer ------------------------
 
 import qualified  Text.Printer  as  P
+
+-- tfmt --------------------------------
+
+import Text.Fmt  ( fmtT )
 
 -- unordered-containers ----------------
 
@@ -394,9 +398,13 @@ parseOptions cwd = Options ⊳ argument (readAbsFile cwd) (help "HOSTS.YAML")
 -- | Perform some IO within a temporary directory freshly created by `mkTempDir`.
 --   Cleans away the created directory when IO is complete.
 
-__loadFile__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
-__loadFile__ f = liftIO $
-  decodeEither' ⊳ readFile (toFilePath f) ≫ either (error ∘ show) return
+__loadFileYaml__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
+__loadFileYaml__ fn = liftIO $
+  decodeEither' ⊳ readFile (toFilePath fn) ≫ either (error ∘ show) return
+
+__loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
+__loadFileDhall__ fn = liftIO $
+  TextIO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) hostsType
 
 domains ∷ [Text]
 domains = ["sixears.co.uk", "0.168.192.in-addr.arpa"];
@@ -427,7 +435,12 @@ main ∷ IO ()
 main = do
   cwd  ← getCwd_
   opts ← optParser "make tiny dns data from hosts config" (parseOptions cwd)
-  hs   ← __loadFile__ (opts ⊣ input)
+  let infn = opts ⊣ input
+      ext  = infn ⊣ extension
+  hs   ← case ext of
+           ".yaml"  → __loadFileYaml__  (opts ⊣ input)
+           ".dhall" → __loadFileDhall__ (opts ⊣ input)
+           _      → dieUsage $ [fmtT|file ext not recognized: '%t'|] ext
 
   putStrLn (show hs)
 
