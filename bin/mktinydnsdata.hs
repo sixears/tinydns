@@ -275,7 +275,7 @@ instance FromJSON HostMap where
      in fromList ⊳ (mapM go $ toList hm) ≫ \ case
           Left  dups → fail $ toString dups
           Right hm'  → return $ HostMap hm'
-  parseJSON invalid     = typeMismatch "host map" invalid
+  parseJSON invalid = typeMismatch "host map" invalid
 
 hmHosts ∷ HostMap → [Host]
 hmHosts (HostMap hm) = elems hm
