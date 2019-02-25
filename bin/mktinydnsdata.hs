@@ -7,6 +7,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+-- {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 
 import Prelude ( error, undefined )
@@ -74,6 +75,7 @@ import Fluffy.Functor2       ( (⊳) )
 import Fluffy.Lens2          ( (⊣), (⊢) )
 import Fluffy.IO.Error       ( AsIOError, IOError )
 import Fluffy.IO.Error2      ( )
+import Fluffy.Map            ( __fromList, fromList )
 import Fluffy.Maybe          ( maybeE )
 import Fluffy.Monad          ( (≫), (⪼) )
 import Fluffy.MonadError     ( splitMError )
@@ -97,6 +99,10 @@ import Data.Hashable  ( Hashable )
 
 import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
+
+-- mono-traversable --------------------
+
+import Data.Containers  ( ContainerKey, IsMap, MapValue, mapFromList )
 
 -- mtl ---------------------------------
 
@@ -144,18 +150,10 @@ import Data.Text     ( Text
 
 import qualified  Text.Printer  as  P
 
--- tfmt --------------------------------
-
-import Text.Fmt  ( fmt )
-
--- Unique ------------------------------
-
-import Data.List.UniqueUnsorted  ( repeated )
-
 -- unordered-containers ----------------
 
 import Data.HashMap.Strict  ( HashMap
-                            , elems, foldrWithKey, fromList, lookup, toList )
+                            , elems, foldrWithKey, lookup, toList )
 
 -- yaml --------------------------------
 
@@ -274,22 +272,17 @@ instance FromJSON HostMap where
         go (k,Object v) = parseJSON (Object v) ≫ return ∘ (UQDN k,)
         go (k,invalid)  =
           typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go (toList hm)) ≫ \ case
-          (hm' ∷ (HashMap UQDN Host)) → return $ HostMap hm'
+     in fromList ⊳ (mapM go $ toList hm) ≫ \ case
+          Left  dups → fail $ toString dups
+          Right hm'  → return $ HostMap hm'
   parseJSON invalid     = typeMismatch "host map" invalid
-
-fromListE ∷ (Hashable κ, Eq κ, MonadError (RepeatedKeyError κ) η) ⇒
-            [(κ,υ)] → η (HashMap κ υ)
-fromListE kvs = case repeated $ fst ⊳ kvs of
-                  []   → return $ fromList kvs
-                  dups → throwError $ RepeatedKeyError dups
 
 hmHosts ∷ HostMap → [Host]
 hmHosts (HostMap hm) = elems hm
 
 hostMapType ∷ Type HostMap
 hostMapType = let localHNKey h = (localPart (fqdn h), h)
-               in HostMap ∘ fromList ∘ fmap localHNKey ⊳ D.list hostType
+               in HostMap ∘ __fromList ∘ fmap localHNKey ⊳ D.list hostType
 
 instance Interpret HostMap where
   autoWith _ = hostMapType
@@ -311,14 +304,9 @@ instance Interpret LocalAlias where
 localAliasPair ∷ LocalAlias → (UQDN,UQDN)
 localAliasPair (LocalAlias from to) = (from,to)
 
-newtype RepeatedKeyError α = RepeatedKeyError [α]
-
-instance Printable α ⇒ Printable (RepeatedKeyError α) where
-  print (RepeatedKeyError ks) = P.text $ [fmt|repeated keys [%L]|] (q ⊳ ks)
-
 shortHostMapType ∷ Type ShortHostMap
 shortHostMapType =
-  ShortHostMap ⊳ fromList ∘ fmap localAliasPair ⊳ D.list localAliasType
+  ShortHostMap ⊳ __fromList ∘ fmap localAliasPair ⊳ D.list localAliasType
 
 instance Interpret ShortHostMap where
   autoWith _ = shortHostMapType
@@ -329,7 +317,9 @@ instance FromJSON ShortHostMap where
         go (k,String v) = return (UQDN k, UQDN v)
         go (k,invalid)  =
           typeMismatch (unpack $ "short host name: '" ⊕ k ⊕ "'") invalid
-     in fmap ShortHostMap ∘ fmap fromList ∘ mapM go $ toList hm
+     in fromList ⊳ (mapM go $ toList hm) ≫ \ case
+          Left dups → fail $ toString dups
+          Right hm' → return $ ShortHostMap hm'
   parseJSON invalid     = typeMismatch "short host map" invalid
 
 ------------------------------------------------------------

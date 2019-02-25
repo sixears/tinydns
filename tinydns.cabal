@@ -46,9 +46,9 @@ cabal-version:        >=1.10
 library
   ghc-options:        -W -Wall -fhelpful-errors
   -- Modules exported by the library.
-  exposed-modules:    Fluffy.Functor2, Fluffy.IO.Error2, Fluffy.Lens2
-                    , Fluffy.Monad, Fluffy.MonadIO2, Fluffy.Path2
-                    , Fluffy.Printable, Fluffy.TempFile2
+  exposed-modules:    Fluffy.Applicative, Fluffy.Functor2, Fluffy.IO.Error2
+                    , Fluffy.Lens2, Fluffy.Map, Fluffy.Monad, Fluffy.MonadIO2
+                    , Fluffy.Path2, Fluffy.Printable, Fluffy.TempFile2
                     , TinyDNS.Paths
 
   -- modules included in this library but not exported.
@@ -59,10 +59,11 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base, base-unicode-symbols, data-textual, lens, mtl, path
-                     , template-haskell, temporary, text, text-printer
+  build-depends:       base, base-unicode-symbols, data-textual, hashable, lens
+                     , mono-traversable, mtl, path, template-haskell, temporary
+                     , text, text-printer, Unique
 
-                     , fluffy >= 0.2.6.0
+                     , fluffy >= 0.2.6.0, tfmt
 
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -80,9 +81,9 @@ executable mktinydnsdata
   main-is:             mktinydnsdata.hs
   hs-source-dirs:      bin
   build-depends:       aeson, base, base-unicode-symbols, bytestring
-                     , data-textual, hashable, lens, mtl, network-ip
-                     , optparse-applicative, path, streaming, text, text-printer
-                     , unordered-containers, yaml
+                     , data-textual, dhall, hashable, lens, mono-traversable, mtl, network-ip
+                     , optparse-applicative, parsec, path, streaming, text
+                     , text-printer, unordered-containers, yaml
 
                      , fluffy >= 0.2.6.0, proclib >= 3.1.1.0
                      , tinydns
