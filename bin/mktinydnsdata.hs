@@ -6,8 +6,8 @@
 {-# LANGUAGE QuasiQuotes         #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
--- {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 
 import Prelude ( error, undefined )
@@ -23,15 +23,16 @@ import qualified  Data.Foldable  as  F
 import Control.Applicative  ( empty, pure )
 import Control.Exception    ( bracket )
 import Control.Monad        ( fail, forM_, forM, join, mapM, mapM_, return )
-import Data.Bool            ( Bool( True ), otherwise )
+import Data.Bool            ( Bool( True ), not, otherwise )
 import Data.Bifunctor       ( bimap, first )
 import Data.Char            ( Char, isAlphaNum )
 import Data.Either          ( Either( Left, Right ), either, partitionEithers )
 import Data.Eq              ( Eq )
-import Data.Foldable        ( Foldable, concat )
+import Data.Foldable        ( Foldable, any, concat )
 import Data.Function        ( ($), (&), flip, id )
 import Data.Functor         ( Functor, fmap )
 import Data.List            ( (!!), intercalate, sortOn )
+import Data.List.NonEmpty   ( NonEmpty )
 import Data.Maybe           ( Maybe( Just ), fromMaybe, maybe )
 import Data.Monoid          ( mappend )
 import Data.Ord             ( Ord, (<) )
@@ -47,7 +48,8 @@ import Text.Show            ( Show, show )
 
 -- base-unicode-symbols ----------------
 
-import Data.Eq.Unicode        ( (≢) )
+import Data.Bool.Unicode      ( (∨) )
+import Data.Eq.Unicode        ( (≡), (≢) )
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
 
@@ -84,7 +86,7 @@ import Fluffy.MonadIO        ( MonadIO, liftIO, unlink )
 import Fluffy.MonadIO.Error  ( eitherIOThrow )
 import Fluffy.MonadIO2       ( die, dieUsage )
 import Fluffy.Options        ( optParser )
-import Fluffy.Parsec         ( Parsecable( parser ) )
+import Fluffy.Parsec2        ( Parsecable( parser, parsec' ), __parsecN )
 import Fluffy.Path           ( AbsDir, AbsFile, AsPathError, RelFile
                              , extension, getCwd_, parseFile' )
 import Fluffy.Path2          ( )
@@ -139,6 +141,13 @@ import ProcLib.Types.RunProcOpts      ( defRunProcOpts, dryRunL, verboseL )
 
 import qualified  Streaming.Prelude  as  S
 
+-- template-haskell --------------------
+
+import Language.Haskell.TH        ( ExpQ, appE, conE, litE, stringL, varE )
+import Language.Haskell.TH.Quote  ( QuasiQuoter( QuasiQuoter, quoteDec
+                                               , quoteExp, quotePat, quoteType )
+                                  )
+
 -- text --------------------------------
 
 import qualified  Data.Text.IO  as  TextIO
@@ -152,7 +161,7 @@ import qualified  Text.Printer  as  P
 
 -- tfmt --------------------------------
 
-import Text.Fmt  ( fmtT )
+import Text.Fmt  ( fmt, fmtT )
 
 -- unordered-containers ----------------
 
@@ -173,22 +182,77 @@ import qualified  TinyDNS.Paths  as  Paths
 
 --------------------------------------------------------------------------------
 
-isAlphaNumU ∷ Char → Bool
-isAlphaNumU '_' = True
-isAlphaNumU c   = isAlphaNum c
+{- | Glossary of Terms:
+
+     * DomainLabel - An identifier, which may contribute to a domain name /
+                     hostname.  In the name `www.google.com`, each of `www`,
+                     `google`, and `com` are `DomainNamePart`s.
+     * Domain      - A (non-empty) list of identifiers, that make up a domain;
+                     thus the right-most identifier must be a TLD (Top-Level
+                     Domain). As a list, this right-most TLD is the `last` of
+                     the list.  A domain denotes a group of hosts (which may be
+                     empty or singleton).  E.g., [ "com" ], or [ "google",
+                     "com" ].
+     * Host        - Any name that may be linked to a single IPv4 address (even
+                     if that address keeps changing, e.g., via round-robin DNS).
+     * HostName    - An identifier, which in the context of a domain, identifies
+                     a (conceptual) host.  E.g., `www` might be a hostname (even
+                     though it may be served by many hosts in practice).
+                     HostNames are thus unqualified.
+     * FQHN        - An identifier, along with a domain, that identifies a single
+                     conceptual host.  Thus `www` with the domain [ "google",
+                     "com" ] (typically rendered as `"www.google.com"`).
+ -}
+
+newtype DomainLabel = DomainLabel Text
+  deriving Show
+
+checkDomainLabel ∷ String → String
+checkDomainLabel "" =
+  error "empty domain label"
+checkDomainLabel (c : cs) | c ≡ '-' =
+  error $ [fmt|domain label first character must not be a hyphen '%s'|] cs
+checkDomainLabel cs | any ( \ c → not $ isAlphaNum c ∨ c ≡ '-' ) cs =
+  error $ [fmt|domain label characters must be alpha-numeric or hyphen '%s'|] cs
+checkDomainLabel cs = cs
+
+domainLabel ∷ QuasiQuoter
+domainLabel = let checkLabel ∷ String → ExpQ
+                  checkLabel = litE ∘ stringL ∘ checkDomainLabel
+                  appPack    ∷ ExpQ → ExpQ
+                  appPack    = appE $ varE 'pack
+                  appDLabel  ∷ ExpQ → ExpQ
+                  appDLabel  = appE $ conE 'DomainLabel
+                  mkDLabel   ∷ String → ExpQ
+                  mkDLabel   = appDLabel ∘ appPack ∘ checkLabel
+               in mkQuasiQuoterExp "domainLabel" mkDLabel
+
+dLabel ∷ QuasiQuoter
+dLabel = domainLabel
+dl ∷ QuasiQuoter
+dl = domainLabel
+
+newtype Domain = NonEmpty DomainLabel
+
+-- checkDomain ∷ String → String
+-- checkDomain 
 
 ------------------------------------------------------------
 
 data Host = Host { fqdn ∷ FQDN
                  , ipv4 ∷ IPv4
                  , desc ∷ Text
+                 , comments ∷ [Text]
+                 , mac ∷ Maybe Text
                  }
   deriving (FromJSON, Generic, Show)
 
 hostType ∷ Type Host
-hostType = record $ Host ⊳ field "fqdn" (FQDN ⊳ D.strictText)
-                         ⊵ field "ipv4" ip4Type
-                         ⊵ field "desc" D.strictText
+hostType = record $ Host ⊳ field "fqdn"     (FQDN ⊳ D.strictText)
+                         ⊵ field "ipv4"     auto
+                         ⊵ field "desc"     D.strictText
+                         ⊵ field "comments" auto
+                         ⊵ field "mac"      auto
 
 instance Interpret Host where
   autoWith _ = hostType
@@ -209,6 +273,10 @@ noPartsFQDN t = "FQDN with no parts: '" ⊕ unpack t ⊕ "'"
 
 badFQDN ∷ Text → String
 badFQDN t = "bad FQDN: '" ⊕ unpack t ⊕ "'"
+
+isAlphaNumU ∷ Char → Bool
+isAlphaNumU '_' = True
+isAlphaNumU c   = isAlphaNum c
 
 instance FromJSON FQDN where
   parseJSON (String "")                = fail "empty FQDN"
@@ -478,24 +546,42 @@ __mkData__ hs (fn1,_) (fn2,_) = do
 
   TextIO.readFile (toString fn1) ≫ TextIO.putStrLn
 
-  let dhall = "{ fqdn = \"fqdn\", desc = \"descn\", ipv4 = \"192.168.0.10\" }"
+  let dhall = "{ fqdn = \"fqdn\", desc = \"descn\", ipv4 = \"192.168.0.10\""
+            ⊕ ", mac = [] : Optional Text, comments = [] : List Text }"
   D.input hostType dhall ≫ putStrLn ∘ show
 
   -- this requires 'Interpret' instance of Host
   (D.input auto dhall ∷ IO Host) ≫ putStrLn ∘ show
 
-  let dhall2 = unlines [ "let HostsType = List { fqdn : Text, desc : Text"
-                       , "                     , ipv4 : Text }"
-                       , " in [ { fqdn = \"fqdn\", desc = \"descn\""
-                       , "      , ipv4 = \"192.168.0.10\" } ]"
+  let dhall2 = unlines [ "let HostsType = List { fqdn : Text"
+                       , "                     , desc : Text"
+                       , "                     , ipv4 : Text"
+                       , "                     , comments : List Text"
+                       , "                     , mac : Optional Text"
+                       , "                     }"
+                       , " in [ { fqdn = \"fqdn\""
+                       , "      , desc = \"descn\""
+                       , "      , ipv4 = \"192.168.0.10\""
+                       , "      , comments = [] : List Text"
+                       , "      , mac = [] : Optional Text"
+                       , "      } ]"
                        , "    : HostsType"
                        ]
   D.input hostMapType dhall2 ≫ putStrLn ∘ show
 
-  let dhall3 = unlines [ "let HostsType = List { fqdn : Text, desc : Text"
-                       , "                     , ipv4 : Text }"
-                       , " in { hosts = [ { fqdn = \"fqdn\", desc = \"descn\""
-                       , "                , ipv4 = \"192.168.0.10\" } ]"
+  let dhall3 = unlines [ "let HostsType = List { fqdn     : Text"
+                       , "                     , desc     : Text"
+                       , "                     , ipv4     : Text"
+                       , "                     , comments : List Text"
+                       , "                     , mac      : Optional Text"
+                       , "                     }"
+                       , " in { hosts = [ { fqdn = \"fqdn\""
+                       , "                , desc = \"descn\""
+                       , "                , ipv4 = \"192.168.0.10\""
+                       , "                , comments = [] : List Text"
+                       , "                , mac = [] : Optional Text"
+                       , "                }"
+                       , "              ]"
                        , "    , aliases = [ { from = \"mailhost\", to = \"cargo\"} ] "
                        , "    , dns_servers = [ \"cargo\", \"chrome\" ]"
                        , "    , mail_servers = [ \"cargo\" ]"
@@ -518,31 +604,28 @@ __withTemps__ io = let pfx1 = Just [pc|tinydns-data-|]
 --                       dhallisms                        --
 ------------------------------------------------------------
 
--- instance Parsecable IPv4 where
---   parser = IPv4 ⊳ _
+instance Parsecable IPv4 where
+  parser = fmap IPv4 $ ip4FromOctets ⊳ parser ⋪ char '.'
+                                     ⊵ parser ⋪ char '.'
+                                     ⊵ parser ⋪ char '.'
+                                     ⊵ parser
 
-word8 ∷ Stream s m Char ⇒ ParsecT s u m Word8
-word8 = read ⊳ go
-  where go = try (mappend ⊳ string "25" ⊵ (pure ⊳ oneOf "012345"))
-           ∤ try ((:) ⊳ char '2' ⊵ ((:) ⊳ oneOf "01234" ⊵ count 1 digit))
-           ∤ try ((:) ⊳ oneOf "01" ⊵ count 2 digit)
-           ∤ try (count 2 digit)
-           ∤ count 1 digit
 
-ipv4P ∷ Stream s m Char ⇒ ParsecT s u m IP4
-ipv4P = ip4FromOctets ⊳ word8 ⋪ char '.'
-                      ⊵ word8 ⋪ char '.'
-                      ⊵ word8 ⋪ char '.' ⊵ word8
+{-| quasi-quoter for ipv4 addresses -}
+ip4 ∷ QuasiQuoter
+ip4 = mkQuasiQuoterExp "ip4" ( \ t → appE (varE '__parsecN) (litE $ stringL t) )
 
-ip4Type ∷ Type IPv4
-ip4Type = Type {..}
-  where extract (DC.TextLit (DC.Chunks [] t)) = case parse (ipv4P ⋪ eof) "" t of
-                                                  Left  e  → error $ show e
-                                                  Right ip → return (IPv4 ip)
-        extract _                             = empty
-        expected = DC.Text
+mkQuasiQuoterExp ∷ Text → (String → ExpQ) → QuasiQuoter
+mkQuasiQuoterExp n f = let notImpl u = error $ [fmt|%t %t  not implemented|] n u
+                        in QuasiQuoter { quoteDec  = notImpl "quoteDec"
+                                       , quoteType = notImpl "quoteType"
+                                       , quotePat  = notImpl "quotePat"
+                                       , quoteExp = f
+                                       }
 
 instance Interpret IPv4 where
-  autoWith _ = ip4Type
-
+  autoWith _ = Type {..}
+               where extract (DC.TextLit (DC.Chunks [] t)) = pure $ __parsecN t
+                     extract _                             = empty
+                     expected = DC.Text
 -- that's all, folks! ----------------------------------------------------------
