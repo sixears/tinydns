@@ -49,7 +49,7 @@ import Fluffy.Applicative    ( (⊵), (∤), (⋪) )
 import Fluffy.Either         ( __right )
 import Fluffy.Functor2       ( (⊳) )
 import Fluffy.IO.Error       ( AsIOError )
-import Fluffy.Lens           ( (##) )
+import Fluffy.Lens2          ( (⋕) )
 import Fluffy.Monad          ( (≫) )
 import Fluffy.MonadIO        ( MonadIO, readFile )
 import Fluffy.Parsec.Error2  ( AsParseError( _ParseError ), IOParseError
@@ -64,7 +64,7 @@ class Parsecable χ where
              Stream s Identity Char, Printable σ) ⇒
             σ → s → μ χ
   parsec sourceName t = case parse parser (toString sourceName) t of
-                           Left  e → throwError (_ParseError ## ParseError e)
+                           Left  e → throwError (_ParseError ⋕ ParseError e)
                            Right s → return s
 
   __parsec ∷ (Printable σ, Stream s Identity Char) ⇒ σ → s → χ

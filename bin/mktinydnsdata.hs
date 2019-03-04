@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE UnicodeSyntax       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 import Prelude ( error, undefined )
 
@@ -18,29 +19,31 @@ import Data.Aeson.Types  ( typeMismatch )
 
 -- base --------------------------------
 
-import qualified  Data.Foldable  as  F
+import qualified  Data.Foldable       as  F
+import qualified  Data.List.NonEmpty  as  NE
 
 import Control.Applicative  ( empty, pure )
 import Control.Exception    ( bracket )
 import Control.Monad        ( fail, forM_, forM, join, mapM, mapM_, return )
-import Data.Bool            ( Bool( True ), not, otherwise )
+import Data.Bool            ( Bool( False, True ), not, otherwise )
 import Data.Bifunctor       ( bimap, first )
 import Data.Char            ( Char, isAlphaNum )
 import Data.Either          ( Either( Left, Right ), either, partitionEithers )
 import Data.Eq              ( Eq )
-import Data.Foldable        ( Foldable, any, concat )
-import Data.Function        ( ($), (&), flip, id )
+import Data.Foldable        ( Foldable, concat, toList )
+import Data.Function        ( ($), (&), const, flip, id )
 import Data.Functor         ( Functor, fmap )
 import Data.List            ( (!!), intercalate, sortOn )
-import Data.List.NonEmpty   ( NonEmpty )
-import Data.Maybe           ( Maybe( Just ), fromMaybe, maybe )
+import Data.List.NonEmpty   ( NonEmpty( (:|) ), nonEmpty, reverse )
+import Data.Maybe           ( Maybe( Just, Nothing ), fromMaybe, maybe )
 import Data.Monoid          ( mappend )
-import Data.Ord             ( Ord, (<) )
+import Data.Ord             ( Ord, (<), (>) )
 import Data.String          ( IsString( fromString ), String )
 import Data.Traversable     ( traverse )
 import Data.Tuple           ( fst,snd )
 import Data.Word            ( Word8 )
 import GHC.Generics         ( Generic )
+import Numeric.Natural      ( Natural )
 import System.Exit          ( ExitCode( ExitFailure ) )
 import System.IO            ( FilePath, Handle, IO, hClose, putStrLn )
 import Text.Read            ( read )
@@ -73,8 +76,10 @@ import Dhall  ( Interpret( autoWith ), Type( Type, expected, extract )
 -- fluffy ------------------------------
 
 import Fluffy.Applicative    ( (⊵), (∤), (⋪) )
+import Fluffy.Either         ( __right )
+import Fluffy.Foldable2      ( length )
 import Fluffy.Functor2       ( (⊳) )
-import Fluffy.Lens2          ( (⊣), (⊢) )
+import Fluffy.Lens2          ( (⊣), (⊢), (⋕) )
 import Fluffy.IO.Error       ( AsIOError, IOError )
 import Fluffy.IO.Error2      ( )
 import Fluffy.Map            ( __fromList, fromList )
@@ -92,6 +97,7 @@ import Fluffy.Path           ( AbsDir, AbsFile, AsPathError, RelFile
 import Fluffy.Path2          ( )
 import Fluffy.Printable      ( __ERR, q )
 import Fluffy.TempFile2      ( pc, with2TempFiles' )
+import Fluffy.Text2          ( splitOn )
 
 -- hashable ----------------------------
 
@@ -99,8 +105,11 @@ import Data.Hashable  ( Hashable )
 
 -- lens --------------------------------
 
+import Control.Lens.Fold    ( (^?) )
 import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
+import Control.Lens.Prism   ( Prism', prism, prism' )
+import Control.Lens.TH      ( makePrisms )
 
 -- mono-traversable --------------------
 
@@ -150,10 +159,11 @@ import Language.Haskell.TH.Quote  ( QuasiQuoter( QuasiQuoter, quoteDec
 
 -- text --------------------------------
 
-import qualified  Data.Text.IO  as  TextIO
+import qualified  Data.Text
+import qualified  Data.Text.IO
 
-import Data.Text     ( Text
-                     , all, null, pack, splitOn, takeWhile, unlines, unpack )
+import Data.Text     ( Text, all, any, null, pack, takeWhile
+                     , uncons, unlines, unpack, unsnoc )
 
 -- text-printer ------------------------
 
@@ -165,8 +175,8 @@ import Text.Fmt  ( fmt, fmtT )
 
 -- unordered-containers ----------------
 
-import Data.HashMap.Strict  ( HashMap
-                            , elems, foldrWithKey, lookup, toList )
+import qualified  Data.HashMap.Strict  as  HashMap
+import Data.HashMap.Strict  ( HashMap, elems, foldrWithKey, lookup )
 
 -- yaml --------------------------------
 
@@ -187,55 +197,408 @@ import qualified  TinyDNS.Paths  as  Paths
      * DomainLabel - An identifier, which may contribute to a domain name /
                      hostname.  In the name `www.google.com`, each of `www`,
                      `google`, and `com` are `DomainNamePart`s.
-     * Domain      - A (non-empty) list of identifiers, that make up a domain;
-                     thus the right-most identifier must be a TLD (Top-Level
-                     Domain). As a list, this right-most TLD is the `last` of
-                     the list.  A domain denotes a group of hosts (which may be
-                     empty or singleton).  E.g., [ "com" ], or [ "google",
-                     "com" ].
-     * Host        - Any name that may be linked to a single IPv4 address (even
-                     if that address keeps changing, e.g., via round-robin DNS).
-     * HostName    - An identifier, which in the context of a domain, identifies
-                     a (conceptual) host.  E.g., `www` might be a hostname (even
-                     though it may be served by many hosts in practice).
-                     HostNames are thus unqualified.
-     * FQHN        - An identifier, along with a domain, that identifies a single
-                     conceptual host.  Thus `www` with the domain [ "google",
-                     "com" ] (typically rendered as `"www.google.com"`).
+     * Domain      - A non-empty list of domain labels.  A Domain maybe
+                     fully-qualified (an FQDN) or unqualified.  FQDNs have the
+                     root domain (called '') as the last element, and so are
+                     written (and parsed) with a trailing '.'.
+     * Hostname    - Any FQDN that may be linked to one or more IPv4 addresses
+                     (even if those addresses keep changing, e.g., via
+                     round-robin DNS).  E.g., `www.google.com`.
+     * LocalName   - The left-most DomainLabel of a Host FQDN (the `head` of the
+                     list).  Thus, for the FQDN `www.google.com`; the HostName
+                     is `www`.
  -}
+
+------------------------------------------------------------
+
+data DomainLabelError = DomainEmptyLabelErr
+                      | DomainHyphenFirstCharErr Text
+                      | DomainLabelLengthErr     Text
+                      | DomainIllegalCharErr     Text
+  deriving Show
+
+maxLabelLength ∷ Natural
+maxLabelLength = 63
+
+instance Printable DomainLabelError where
+  print DomainEmptyLabelErr = P.text "empty domain label"
+  print (DomainHyphenFirstCharErr d) = P.text $ 
+    [fmt|domain label first character must not be a hyphen '%t'|] d
+  print (DomainLabelLengthErr d) = P.text $ 
+    [fmt|domain label length %d exceeds %d '%t'|] (length d) maxLabelLength d
+  print (DomainIllegalCharErr d) = P.text $ 
+    [fmt|domain label characters must be alpha-numeric or hyphen '%t'|] d
+
+--------------------
+
+class AsDomainLabelError ε where
+  _DomainLabelError ∷ Prism' ε DomainLabelError
+
+instance AsDomainLabelError DomainLabelError where
+  _DomainLabelError = id
+
+throwAsDomainLabelError ∷ (AsDomainLabelError ε, MonadError ε η) ⇒
+                          DomainLabelError → η α
+throwAsDomainLabelError = throwError ∘ (_DomainLabelError ⋕)
+    
+------------------------------------------------------------
 
 newtype DomainLabel = DomainLabel Text
   deriving Show
 
-checkDomainLabel ∷ String → String
-checkDomainLabel "" =
-  error "empty domain label"
-checkDomainLabel (c : cs) | c ≡ '-' =
-  error $ [fmt|domain label first character must not be a hyphen '%s'|] cs
-checkDomainLabel cs | any ( \ c → not $ isAlphaNum c ∨ c ≡ '-' ) cs =
-  error $ [fmt|domain label characters must be alpha-numeric or hyphen '%s'|] cs
-checkDomainLabel cs = cs
+instance Printable DomainLabel where
+  print (DomainLabel dl) = P.text dl
+
+------------------------------------------------------------
+
+parseDomainLabel ∷ (Printable ρ, AsDomainLabelError ε, MonadError ε η) ⇒
+                   ρ → η DomainLabel
+parseDomainLabel (toText → d) =
+  case uncons d of
+    Nothing       → throwAsDomainLabelError DomainEmptyLabelErr
+    Just ('-', _) → throwAsDomainLabelError $ DomainHyphenFirstCharErr d
+    _             → if any ( \ c → not $ isAlphaNum c ∨ c ≡ '-' ) d
+                    then throwAsDomainLabelError $ DomainIllegalCharErr d
+                    else if length d > maxLabelLength
+                         then throwAsDomainLabelError $ DomainLabelLengthErr d
+                         else return $ DomainLabel d
+
+parseDomainLabel' ∷ (Printable ρ, MonadError DomainLabelError η) ⇒
+                    ρ → η DomainLabel
+parseDomainLabel' = parseDomainLabel
+
+__parseDomainLabel ∷ Printable ρ ⇒ ρ → DomainLabel
+__parseDomainLabel = __right ∘ parseDomainLabel'
+
+__parseDomainLabel' ∷ Text → DomainLabel
+__parseDomainLabel' = __parseDomainLabel
 
 domainLabel ∷ QuasiQuoter
-domainLabel = let checkLabel ∷ String → ExpQ
-                  checkLabel = litE ∘ stringL ∘ checkDomainLabel
-                  appPack    ∷ ExpQ → ExpQ
-                  appPack    = appE $ varE 'pack
-                  appDLabel  ∷ ExpQ → ExpQ
-                  appDLabel  = appE $ conE 'DomainLabel
-                  mkDLabel   ∷ String → ExpQ
-                  mkDLabel   = appDLabel ∘ appPack ∘ checkLabel
-               in mkQuasiQuoterExp "domainLabel" mkDLabel
+domainLabel = let parseExp ∷ String → ExpQ
+                  parseExp = appE (varE '__parseDomainLabel') ∘ litE ∘ stringL
+               in mkQuasiQuoterExp "domainLabel" parseExp
+                
 
 dLabel ∷ QuasiQuoter
 dLabel = domainLabel
 dl ∷ QuasiQuoter
 dl = domainLabel
 
-newtype Domain = NonEmpty DomainLabel
+------------------------------------------------------------
 
--- checkDomain ∷ String → String
--- checkDomain 
+data DomainError = DomainEmptyErr
+                 | DomainLengthErr Text
+                 | DomainLabelErr DomainLabelError
+  deriving Show
+
+instance Printable DomainError where
+  print DomainEmptyErr = P.text "empty domain"
+  print (DomainLabelErr e) = print e
+
+_DomainEmptyErr ∷ Prism' DomainError ()
+_DomainEmptyErr = prism' (const DomainEmptyErr)
+                         ( \ case DomainEmptyErr → Just (); _ → Nothing )
+                    
+_DomainLabelErr ∷ Prism' DomainError DomainLabelError
+_DomainLabelErr = prism' DomainLabelErr
+                         (\ case (DomainLabelErr e) → Just e; _ → Nothing)
+
+_DomainLengthErr ∷ Prism' DomainError Text
+_DomainLengthErr = prism' DomainLengthErr
+                          (\ case (DomainLengthErr e) → Just e; _ → Nothing)
+
+--------------------
+
+class AsDomainError ε where
+  _DomainError ∷ Prism' ε DomainError
+
+instance AsDomainError DomainError where
+  _DomainError = id
+
+instance AsDomainLabelError DomainError where
+  _DomainLabelError = prism' DomainLabelErr (^? _DomainLabelErr)
+    
+--------------------
+
+class ToDomainError α where
+  toDomainError ∷ α → DomainError
+
+instance ToDomainError DomainError where
+  toDomainError = id
+
+instance ToDomainError DomainLabelError where
+  toDomainError = DomainLabelErr
+
+throwAsDomainError ∷ (ToDomainError α, AsDomainError ε, MonadError ε η) ⇒ α → η β
+throwAsDomainError = throwError ∘ (_DomainError ⋕) ∘ toDomainError
+    
+------------------------------------------------------------
+
+data FQDNError = FQDNNotFullyQualifiedErr Text
+               | DomainErrorErr DomainError
+  deriving Show
+
+instance Printable FQDNError where
+  print (FQDNNotFullyQualifiedErr t) =
+    P.text $ [fmt|FQDN not fully qualified: '%t'|] t
+  print (DomainErrorErr e) = print e
+
+_FQDNNotFullyQualifiedErr ∷ Prism' FQDNError Text
+_FQDNNotFullyQualifiedErr = prism' FQDNNotFullyQualifiedErr
+                                   ( \ case
+                                         (FQDNNotFullyQualifiedErr t) → Just t
+                                         _                            → Nothing
+                                   )
+                    
+_DomainErrorErr ∷ Prism' FQDNError DomainError
+_DomainErrorErr = prism' DomainErrorErr
+                         (\ case (DomainErrorErr e) → Just e; _ → Nothing)
+
+--------------------
+
+class AsFQDNError ε where
+  _FQDNError ∷ Prism' ε FQDNError
+
+instance AsFQDNError FQDNError where
+  _FQDNError = id
+
+instance AsDomainError FQDNError where
+  _DomainError = prism' DomainErrorErr (^? _DomainErrorErr)
+
+--------------------
+
+class ToFQDNError α where
+  toFQDNError ∷ α → FQDNError
+
+instance ToFQDNError FQDNError where
+  toFQDNError = id
+
+instance ToFQDNError DomainError where
+  toFQDNError = DomainErrorErr
+
+throwAsFQDNError ∷ (ToFQDNError α, AsFQDNError ε, MonadError ε η) ⇒ α → η β
+throwAsFQDNError = throwError ∘ (_FQDNError ⋕) ∘ toFQDNError
+    
+------------------------------------------------------------
+
+newtype DomainLabels = DomainLabels (NonEmpty DomainLabel)
+  deriving Show
+
+data DomainQualification = FQDN' | UQDN'
+  deriving Show
+
+{- | Render a domain, without a trailing dot even for FQDN, to make the 253-char
+     check that excludes any trailing dot
+-}
+renderDomainLabels ∷ NonEmpty DomainLabel → Text
+renderDomainLabels ds = Data.Text.intercalate "." (toText ⊳ toList ds)
+
+instance Printable DomainLabels where
+  print (DomainLabels dls) = P.text $ renderDomainLabels dls
+
+class Domain' δ where
+  domainLabels ∷ δ → DomainLabels
+
+newtype FQDN'' = FQDN'' DomainLabels
+  deriving Show
+
+instance Domain' FQDN'' where
+  domainLabels (FQDN'' dls) = dls
+
+instance Printable FQDN'' where
+  print (FQDN'' dls) = P.text $ toText dls ⊕ "."
+
+newtype UQDN'' = UQDN'' DomainLabels
+
+instance Domain' UQDN'' where
+  domainLabels (UQDN'' dls) = dls
+
+data Domain = Domain DomainQualification DomainLabels
+  deriving Show
+
+instance Printable Domain where
+  print (Domain FQDN' dls) = print dls ⊕ "."
+  print (Domain UQDN' dls) = print dls
+
+fullyQualified ∷ Domain → Bool
+fullyQualified (Domain FQDN' _) = True
+fullyQualified (Domain UQDN' _) = False
+
+maxDomainLength ∷ Natural
+maxDomainLength = 253
+
+checkDomainLength ∷ (AsDomainError ε, MonadError ε η) ⇒
+                    NonEmpty DomainLabel → η DomainLabels
+checkDomainLength dls = let txt = renderDomainLabels dls
+                         in if length txt > maxDomainLength
+                            then throwAsDomainError $ DomainLengthErr txt
+                            else return $ DomainLabels dls
+
+parseDomainLabels ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒
+                    ρ → η DomainLabels
+parseDomainLabels (splitOn "." ∘ toText → ("" :| [])) =
+  throwAsDomainError DomainEmptyErr
+parseDomainLabels (splitOn "." ∘ toText → ds) =
+  case mapM parseDomainLabel' ds of
+    Left  dle → throwAsDomainError dle
+    Right ds' → checkDomainLength ds'
+  
+parseDomainLabels' ∷ (Printable ρ, MonadError DomainError η) ⇒
+                     ρ → η DomainLabels
+parseDomainLabels' = parseDomainLabels
+
+parseFQDN ∷ (Printable ρ, AsFQDNError ε, MonadError ε η) ⇒ ρ → η FQDN''
+parseFQDN (unsnoc ∘ toText → Nothing) =
+  throwAsFQDNError DomainEmptyErr
+parseFQDN (unsnoc ∘ toText → Just (d,'.')) =
+  either throwAsFQDNError (return ∘ FQDN'') (parseDomainLabels' d)
+{-
+  case parseDomainLabels d of
+    Left  dee → throwAsFQDNError $ DomainErrorErr dee
+    Right dls → return $ FQDN'' dls
+-}
+parseFQDN d@(unsnoc ∘ toText → Just _) =
+  throwAsFQDNError $ FQDNNotFullyQualifiedErr (toText d)
+
+{-
+  case reverse $ splitOn "." (toText d) of
+    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
+    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
+      case mapM parseDomainLabel (reverse ds) of
+        Left dle → throwAsDomainError dle
+        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
+    ds        → -- unqualified
+      case mapM parseDomainLabel (reverse ds) of
+        Left dle → throwAsDomainError dle
+        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
+
+parseUQDN ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒ ρ → η UQDN''
+parseUQDN d =
+  case reverse $ splitOn "." (toText d) of
+    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
+    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
+      case mapM parseDomainLabel (reverse ds) of
+        Left dle → throwAsDomainError dle
+        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
+    ds        → -- unqualified
+      case mapM parseDomainLabel (reverse ds) of
+        Left dle → throwAsDomainError dle
+        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
+-}
+
+parseDomain ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒ ρ → η Domain
+parseDomain d =
+  case reverse $ splitOn "." (toText d) of
+    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
+    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
+      case mapM parseDomainLabel' (reverse ds) of
+        Left dle → throwAsDomainError dle
+        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
+    ds        → -- unqualified
+      case mapM parseDomainLabel' (reverse ds) of
+        Left  dle → throwAsDomainError dle
+        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
+
+parseDomain' ∷ (Printable ρ, MonadError DomainError η) ⇒ ρ → η Domain
+parseDomain' = parseDomain
+
+__parseDomain ∷ Printable ρ ⇒ ρ → Domain
+__parseDomain = __right ∘ parseDomain'
+
+__parseDomain' ∷ Text → Domain
+__parseDomain' = __parseDomain
+
+domain ∷ QuasiQuoter
+domain = let parseExp ∷ String → ExpQ
+             parseExp = appE (varE '__parseDomain') ∘ litE ∘ stringL
+         in mkQuasiQuoterExp "domain" parseExp
+                
+
+d ∷ QuasiQuoter
+d = domain
+
+------------------------------------------------------------
+
+data HostnameError = HostnameNotFullyQualifiedErr Text
+                   | HostnameDomainErr DomainError
+  deriving Show
+
+_HostnameNotFullyQualifiedErr ∷ Prism' HostnameError Text
+_HostnameNotFullyQualifiedErr =
+  prism' HostnameNotFullyQualifiedErr
+         ( \ case (HostnameNotFullyQualifiedErr h) → Just h; _ → Nothing )
+                    
+_HostnameDomainErr ∷ Prism' HostnameError DomainError
+_HostnameDomainErr = prism' HostnameDomainErr
+                            (\ case (HostnameDomainErr e) → Just e; _ → Nothing)
+
+instance Printable HostnameError where
+  print (HostnameNotFullyQualifiedErr h) =
+    P.text $ [fmt|hostname is not fully qualified: '%t'|] h
+  print (HostnameDomainErr e) = print e
+
+class AsHostnameError ε where
+  _HostnameError ∷ Prism' ε HostnameError
+
+throwAsHostnameError ∷ (AsHostnameError ε, MonadError ε η) ⇒ HostnameError → η α
+throwAsHostnameError = throwError ∘ (_HostnameError ⋕)
+    
+instance AsHostnameError HostnameError where
+  _HostnameError = id
+
+instance AsDomainError HostnameError where
+  _DomainError = prism' HostnameDomainErr (^? _HostnameDomainErr)
+
+------------------------------------------------------------
+
+data Hostname = Hostname FQDN''
+  deriving Show
+
+instance Printable Hostname where
+  print (Hostname dls) = print dls ⊕ "."
+
+parseHostname ∷ (Printable ρ, AsHostnameError ε, MonadError ε η) ⇒
+                ρ → η Hostname
+parseHostname (unsnoc ∘ toText → Nothing) =
+  throwAsHostnameError $ HostnameDomainErr DomainEmptyErr
+parseHostname (unsnoc ∘ toText → Just (d,'.')) =
+  throwAsHostnameError $ HostnameNotFullyQualifiedErr d
+parseHostname d@(unsnoc ∘ toText → Just (_,_)) =
+  case parseDomain d of
+    Left e → throwAsHostnameError $ HostnameDomainErr e
+--    Right r
+
+{-
+parseHostname ∷ (Printable ρ, AsHostnameError ε, MonadError ε η) ⇒
+                ρ → η Hostname
+parseHostname (unsnoc ∘ toText → h) =
+  unsnoc 
+  case parseDomain h of
+    Left  e → throwAsHostnameError $ HostnameDomainErr e
+    Right h' → if fullyQualified h'
+               then return (Hostname $ _ h')
+               else throwAsHostnameError $ HostnameNotFullyQualifiedErr h
+-}
+
+parseHostname' ∷ (Printable ρ, MonadError HostnameError η) ⇒ ρ → η Hostname
+parseHostname' = parseHostname
+
+__parseHostname ∷ Printable ρ ⇒ ρ → Hostname
+__parseHostname = __right ∘ parseHostname'
+
+__parseHostname' ∷ Text → Hostname
+__parseHostname' = __parseHostname
+
+hostname ∷ QuasiQuoter
+hostname = let parseExp ∷ String → ExpQ
+               parseExp = appE (varE '__parseHostname') ∘ litE ∘ stringL
+            in mkQuasiQuoterExp "hostname" parseExp
+                
+
+host ∷ QuasiQuoter
+host = hostname
+h ∷ QuasiQuoter
+h = hostname
 
 ------------------------------------------------------------
 
@@ -344,7 +707,7 @@ instance FromJSON HostMap where
         go (k,Object v) = parseJSON (Object v) ≫ return ∘ (UQDN k,)
         go (k,invalid)  =
           typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go $ toList hm) ≫ \ case
+     in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
           Left  dups → fail $ toString dups
           Right hm'  → return $ HostMap hm'
   parseJSON invalid = typeMismatch "host map" invalid
@@ -389,7 +752,7 @@ instance FromJSON ShortHostMap where
         go (k,String v) = return (UQDN k, UQDN v)
         go (k,invalid)  =
           typeMismatch (unpack $ "short host name: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go $ toList hm) ≫ \ case
+     in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
           Left dups → fail $ toString dups
           Right hm' → return $ ShortHostMap hm'
   parseJSON invalid     = typeMismatch "short host map" invalid
@@ -472,7 +835,7 @@ __loadFileYaml__ fn = liftIO $
 
 __loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
 __loadFileDhall__ fn = liftIO $
-  TextIO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) hostsType
+  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) hostsType
 
 domains ∷ [Text]
 domains = ["sixears.co.uk", "0.168.192.in-addr.arpa"];
@@ -544,7 +907,7 @@ __mkData__ hs (fn1,_) (fn2,_) = do
     Right as → mapM_ runProc $ ( addMxCmd fn1 fn2 ) ⊳ as
 
 
-  TextIO.readFile (toString fn1) ≫ TextIO.putStrLn
+  Data.Text.IO.readFile (toString fn1) ≫ Data.Text.IO.putStrLn
 
   let dhall = "{ fqdn = \"fqdn\", desc = \"descn\", ipv4 = \"192.168.0.10\""
             ⊕ ", mac = [] : Optional Text, comments = [] : List Text }"
@@ -628,4 +991,5 @@ instance Interpret IPv4 where
                where extract (DC.TextLit (DC.Chunks [] t)) = pure $ __parsecN t
                      extract _                             = empty
                      expected = DC.Text
+
 -- that's all, folks! ----------------------------------------------------------
