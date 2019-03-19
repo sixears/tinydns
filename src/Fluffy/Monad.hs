@@ -1,12 +1,12 @@
 {-# LANGUAGE UnicodeSyntax #-}
 
 module Fluffy.Monad
-  ( (⪼), (≪), (≫), (⋘), (⋙) )
+  ( (⪼), (≪), (≫), (⋘), (⋙), returnPair )
 where
 
 -- base --------------------------------
 
-import Control.Monad  ( Monad, (>>), (>>=), (=<<) )
+import Control.Monad  ( Monad, (>>), (>>=), (=<<), return )
 import Data.Functor   ( Functor, fmap )
 
 --------------------------------------------------------------------------------
@@ -37,5 +37,8 @@ x ⋘ y = fmap (x ≪) y
 -}
 (⋙) ∷ (Monad η, Functor ψ) ⇒ ψ (η α) → (α → η β) → ψ (η β)
 x ⋙ y = fmap (≫ y) x
+
+returnPair ∷ Monad η ⇒ (η α, η β) → η (α,β)
+returnPair (a,b) = a ≫ \ a' → b ≫ \ b' → return (a',b')
 
 -- that's all, folks! ----------------------------------------------------------

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass      #-}
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE QuasiQuotes         #-}
@@ -8,53 +9,40 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 {-# LANGUAGE ViewPatterns        #-}
 
-import Prelude ( error, undefined )
+import Prelude ( error )
 
 -- aeson -------------------------------
 
-import Data.Aeson.Types  ( typeMismatch )
+import Data.Aeson.Types  ( Value( Object ), typeMismatch )
 
 -- base --------------------------------
 
-import qualified  Data.Foldable       as  F
-import qualified  Data.List.NonEmpty  as  NE
-
-import Control.Applicative  ( empty, pure )
-import Control.Exception    ( bracket )
-import Control.Monad        ( fail, forM_, forM, join, mapM, mapM_, return )
-import Data.Bool            ( Bool( False, True ), not, otherwise )
-import Data.Bifunctor       ( bimap, first )
-import Data.Char            ( Char, isAlphaNum )
+import Control.Monad        ( fail, forM_, forM, mapM, mapM_, return )
+import Data.Bool            ( Bool( False, True ), not )
+import Data.Bifunctor       ( first )
 import Data.Either          ( Either( Left, Right ), either, partitionEithers )
 import Data.Eq              ( Eq )
-import Data.Foldable        ( Foldable, concat, toList )
 import Data.Function        ( ($), (&), const, flip, id )
-import Data.Functor         ( Functor, fmap )
-import Data.List            ( (!!), intercalate, sortOn )
-import Data.List.NonEmpty   ( NonEmpty( (:|) ), nonEmpty, reverse )
-import Data.Maybe           ( Maybe( Just, Nothing ), fromMaybe, maybe )
-import Data.Monoid          ( mappend )
-import Data.Ord             ( Ord, (<), (>) )
-import Data.String          ( IsString( fromString ), String )
-import Data.Traversable     ( traverse )
-import Data.Tuple           ( fst,snd )
-import Data.Word            ( Word8 )
+import Data.Functor         ( fmap )
+import Data.IORef           ( IORef, readIORef, writeIORef )
+import Data.List            ( intercalate, sortOn )
+import Data.Maybe           ( Maybe( Just, Nothing ), maybe )
+import Data.Monoid          ( Monoid )
+import Data.String          ( String )
+import Data.Tuple           ( uncurry )
 import GHC.Generics         ( Generic )
-import Numeric.Natural      ( Natural )
 import System.Exit          ( ExitCode( ExitFailure ) )
-import System.IO            ( FilePath, Handle, IO, hClose, putStrLn )
-import Text.Read            ( read )
+import System.IO            ( FilePath, Handle, IO, putStrLn )
 import Text.Show            ( Show, show )
 
 -- base-unicode-symbols ----------------
 
-import Data.Bool.Unicode      ( (∨) )
-import Data.Eq.Unicode        ( (≡), (≢) )
 import Data.Function.Unicode  ( (∘) )
-import Data.Monoid.Unicode    ( (⊕) )
+import Data.Monoid.Unicode    ( (∅), (⊕) )
 
 -- bytestring --------------------------
 
@@ -62,78 +50,83 @@ import Data.ByteString  ( readFile )
 
 -- data-textual ------------------------
 
-import Data.Textual  ( Parsed( Parsed, Malformed ), Printable( print )
-                     , parseText, toString, toText )
+import Data.Textual  ( Printable( print ), toString, toText )
 
 -- dhall -------------------------------
 
 import qualified  Dhall       as  D
-import qualified  Dhall.Core  as  DC
 
-import Dhall  ( Interpret( autoWith ), Type( Type, expected, extract )
+import Dhall  ( Interpret( autoWith ), Type
               , auto, field, record )
+
+-- domainnames -------------------------
+
+import qualified  DomainNames.T.FQDN
+
+import DomainNames.Error.DomainError     ( AsDomainError( _DomainError )
+                                         , DomainError )
+import DomainNames.Error.LocalnameError  ( LocalnameError )
+import DomainNames.FQDN                  ( FQDN, fqdn )
+import DomainNames.Hostname              ( Hostname, Localname, (<..>)
+                                         , hostlocal, hostname, localname
+                                         , parseLocalname'
+                                         )
 
 -- fluffy ------------------------------
 
-import Fluffy.Applicative    ( (⊵), (∤), (⋪) )
-import Fluffy.Either         ( __right )
-import Fluffy.Foldable2      ( length )
+import Fluffy.Applicative    ( (⊵) )
+import Fluffy.Either         ( __right, leftFail )
+import Fluffy.Foldable2      ( HasLength( length ) )
 import Fluffy.Functor2       ( (⊳) )
-import Fluffy.Lens2          ( (⊣), (⊢), (⋕) )
-import Fluffy.IO.Error       ( AsIOError, IOError )
+import Fluffy.Lens2          ( (⊣), (⊢) )
 import Fluffy.IO.Error2      ( )
+import Fluffy.IP4            ( IP4, ip4 )
 import Fluffy.Map            ( __fromList, fromList )
 import Fluffy.Maybe          ( maybeE )
-import Fluffy.Monad          ( (≫), (⪼) )
+import Fluffy.Monad          ( (≫), returnPair )
 import Fluffy.MonadError     ( splitMError )
-import Fluffy.MonadError.IO  ( asIOError )
-import Fluffy.MonadIO        ( MonadIO, liftIO, unlink )
-import Fluffy.MonadIO.Error  ( eitherIOThrow )
+import Fluffy.MonadIO        ( MonadIO, liftIO )
 import Fluffy.MonadIO2       ( die, dieUsage )
 import Fluffy.Options        ( optParser )
-import Fluffy.Parsec2        ( Parsecable( parser, parsec' ), __parsecN )
-import Fluffy.Path           ( AbsDir, AbsFile, AsPathError, RelFile
+import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseFile' )
 import Fluffy.Path2          ( )
-import Fluffy.Printable      ( __ERR, q )
+import Fluffy.Tasty          ( runTestsP_ )
+import Fluffy.Tasty2         ( assertListEqIO )
 import Fluffy.TempFile2      ( pc, with2TempFiles' )
-import Fluffy.Text2          ( splitOn )
+import Fluffy.Text2          ( parenthesize )
 
--- hashable ----------------------------
+-- hostsdb -----------------------------
 
-import Data.Hashable  ( Hashable )
+import qualified  HostsDB.T.Host
+
+import HostsDB.Host  ( Host( Host ), hname, hostType, ipv4 )
 
 -- lens --------------------------------
 
-import Control.Lens.Fold    ( (^?) )
 import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
-import Control.Lens.Prism   ( Prism', prism, prism' )
-import Control.Lens.TH      ( makePrisms )
+import Control.Lens.Prism   ( Prism', prism' )
 
 -- mono-traversable --------------------
 
-import Data.Containers  ( ContainerKey, IsMap, MapValue, mapFromList )
+import Data.MonoTraversable  ( Element
+                             , MonoFoldable( ofoldl', ofoldl1Ex', ofoldMap
+                                           , ofoldr, ofoldr1Ex, otoList )
+                             )
 
 -- mtl ---------------------------------
 
-import Control.Monad.Except  ( ExceptT, MonadError, throwError )
-
--- network-ip --------------------------
-
-import Network.IP.Addr  ( IP4, ip4FromOctets )
+import Control.Monad.Except  ( MonadError )
 
 -- optparse-applicative ----------------
 
-import qualified  Options.Applicative.Types  as OptParse
+import qualified  Options.Applicative.Types  as  OptParse
 
 import Options.Applicative.Builder  ( ReadM, argument, eitherReader, help )
 
 -- parsec ------------------------------
 
-import Text.Parsec.Char        ( char, digit, oneOf, string )
-import Text.Parsec.Combinator  ( count, eof )
-import Text.Parsec.Prim        ( ParsecT, Stream, parse, try )
 
 -- path --------------------------------
 
@@ -141,29 +134,26 @@ import Path  ( File, Path, (</>), toFilePath )
 
 -- proclib -----------------------------
 
-import ProcLib.Error.ExecCreateError  ( ExecCreateError )
+import ProcLib.Error.CreateProcError  ( AsCreateProcError( _CreateProcError ) )
+import ProcLib.Error.ExecError        ( AsExecError( _ExecError ) )
+import ProcLib.Error.ExecCreateError  ( ExecCreateError( ECExecE, ECCreateE ) )
 import ProcLib.Process                ( mkProc_, runProcIO )
 import ProcLib.Types.CmdSpec          ( CmdSpec( CmdSpec ) )
-import ProcLib.Types.RunProcOpts      ( defRunProcOpts, dryRunL, verboseL )
+import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 
--- streaming ---------------------------
+-- tasty -------------------------------
 
-import qualified  Streaming.Prelude  as  S
+import Test.Tasty  ( TestTree, defaultMain, testGroup, withResource )
 
--- template-haskell --------------------
+-- tasty-hunit -------------------------
 
-import Language.Haskell.TH        ( ExpQ, appE, conE, litE, stringL, varE )
-import Language.Haskell.TH.Quote  ( QuasiQuoter( QuasiQuoter, quoteDec
-                                               , quoteExp, quotePat, quoteType )
-                                  )
+import Test.Tasty.HUnit  ( assertFailure )
 
 -- text --------------------------------
 
-import qualified  Data.Text
 import qualified  Data.Text.IO
 
-import Data.Text     ( Text, all, any, null, pack, takeWhile
-                     , uncons, unlines, unpack, unsnoc )
+import Data.Text     ( Text, concat, pack, unlines, unpack )
 
 -- text-printer ------------------------
 
@@ -171,17 +161,17 @@ import qualified  Text.Printer  as  P
 
 -- tfmt --------------------------------
 
-import Text.Fmt  ( fmt, fmtT )
+import Text.Fmt  ( fmtT )
 
 -- unordered-containers ----------------
 
 import qualified  Data.HashMap.Strict  as  HashMap
-import Data.HashMap.Strict  ( HashMap, elems, foldrWithKey, lookup )
+import Data.HashMap.Strict  ( HashMap, elems, lookup )
 
 -- yaml --------------------------------
 
 import qualified  Data.Yaml  as  Yaml
-import Data.Yaml  ( FromJSON( parseJSON ), Value( Object, String )
+import Data.Yaml  ( FromJSON( parseJSON ), Value( String )
                   , decodeEither' )
 
 ------------------------------------------------------------
@@ -192,519 +182,50 @@ import qualified  TinyDNS.Paths  as  Paths
 
 --------------------------------------------------------------------------------
 
-{- | Glossary of Terms:
+newtype HostMap = HostMap { unHostMap ∷ HashMap Localname Host }
+  deriving (Eq, Show)
+
+instance HasLength HostMap where
+  length = length ∘ unHostMap
+
+data LocalHostRelation = LocalHostRelation { lname ∷ Localname, lhost ∷ Host }
+  deriving Eq
+
+instance Printable LocalHostRelation where
+  print lh = P.text ∘ parenthesize $ concat [ toText $ lname lh
+                                            , " → "
+                                            , toText $ lhost lh
+                                            ]
+
+type instance Element HostMap = LocalHostRelation
+instance MonoFoldable HostMap where
+  ofoldMap ∷ Monoid ξ ⇒ (LocalHostRelation → ξ) → HostMap → ξ
+  ofoldMap f hm =
+    HashMap.foldlWithKey' (\ a k v → a ⊕ f (LocalHostRelation k v)) ∅ hm
+
+  ofoldr ∷ (LocalHostRelation → α → α) → α → HostMap → α
+  ofoldr f init (HostMap hm) =
+    HashMap.foldrWithKey (\ k v a → f (LocalHostRelation k v) a) init hm
+
+  ofoldl' ∷ (α → LocalHostRelation → α) → α → HostMap → α
+  ofoldl' f init (HostMap hm) =
+    HashMap.foldlWithKey' (\ a k v → f a (LocalHostRelation k v)) init hm
+
+  ofoldr1Ex ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
+            → HostMap → LocalHostRelation
+  ofoldr1Ex f (HostMap hm) =
+    ofoldr1Ex f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
+
+  ofoldl1Ex' ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
+             → HostMap → LocalHostRelation
+  ofoldl1Ex' f (HostMap hm) =
+    ofoldl1Ex' f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
 
-     * DomainLabel - An identifier, which may contribute to a domain name /
-                     hostname.  In the name `www.google.com`, each of `www`,
-                     `google`, and `com` are `DomainNamePart`s.
-     * Domain      - A non-empty list of domain labels.  A Domain maybe
-                     fully-qualified (an FQDN) or unqualified.  FQDNs have the
-                     root domain (called '') as the last element, and so are
-                     written (and parsed) with a trailing '.'.
-     * Hostname    - Any FQDN that may be linked to one or more IPv4 addresses
-                     (even if those addresses keep changing, e.g., via
-                     round-robin DNS).  E.g., `www.google.com`.
-     * LocalName   - The left-most DomainLabel of a Host FQDN (the `head` of the
-                     list).  Thus, for the FQDN `www.google.com`; the HostName
-                     is `www`.
- -}
-
-------------------------------------------------------------
-
-data DomainLabelError = DomainEmptyLabelErr
-                      | DomainHyphenFirstCharErr Text
-                      | DomainLabelLengthErr     Text
-                      | DomainIllegalCharErr     Text
-  deriving Show
-
-maxLabelLength ∷ Natural
-maxLabelLength = 63
-
-instance Printable DomainLabelError where
-  print DomainEmptyLabelErr = P.text "empty domain label"
-  print (DomainHyphenFirstCharErr d) = P.text $ 
-    [fmt|domain label first character must not be a hyphen '%t'|] d
-  print (DomainLabelLengthErr d) = P.text $ 
-    [fmt|domain label length %d exceeds %d '%t'|] (length d) maxLabelLength d
-  print (DomainIllegalCharErr d) = P.text $ 
-    [fmt|domain label characters must be alpha-numeric or hyphen '%t'|] d
-
---------------------
-
-class AsDomainLabelError ε where
-  _DomainLabelError ∷ Prism' ε DomainLabelError
-
-instance AsDomainLabelError DomainLabelError where
-  _DomainLabelError = id
-
-throwAsDomainLabelError ∷ (AsDomainLabelError ε, MonadError ε η) ⇒
-                          DomainLabelError → η α
-throwAsDomainLabelError = throwError ∘ (_DomainLabelError ⋕)
-    
-------------------------------------------------------------
-
-newtype DomainLabel = DomainLabel Text
-  deriving Show
-
-instance Printable DomainLabel where
-  print (DomainLabel dl) = P.text dl
-
-------------------------------------------------------------
-
-parseDomainLabel ∷ (Printable ρ, AsDomainLabelError ε, MonadError ε η) ⇒
-                   ρ → η DomainLabel
-parseDomainLabel (toText → d) =
-  case uncons d of
-    Nothing       → throwAsDomainLabelError DomainEmptyLabelErr
-    Just ('-', _) → throwAsDomainLabelError $ DomainHyphenFirstCharErr d
-    _             → if any ( \ c → not $ isAlphaNum c ∨ c ≡ '-' ) d
-                    then throwAsDomainLabelError $ DomainIllegalCharErr d
-                    else if length d > maxLabelLength
-                         then throwAsDomainLabelError $ DomainLabelLengthErr d
-                         else return $ DomainLabel d
-
-parseDomainLabel' ∷ (Printable ρ, MonadError DomainLabelError η) ⇒
-                    ρ → η DomainLabel
-parseDomainLabel' = parseDomainLabel
-
-__parseDomainLabel ∷ Printable ρ ⇒ ρ → DomainLabel
-__parseDomainLabel = __right ∘ parseDomainLabel'
-
-__parseDomainLabel' ∷ Text → DomainLabel
-__parseDomainLabel' = __parseDomainLabel
-
-domainLabel ∷ QuasiQuoter
-domainLabel = let parseExp ∷ String → ExpQ
-                  parseExp = appE (varE '__parseDomainLabel') ∘ litE ∘ stringL
-               in mkQuasiQuoterExp "domainLabel" parseExp
-                
-
-dLabel ∷ QuasiQuoter
-dLabel = domainLabel
-dl ∷ QuasiQuoter
-dl = domainLabel
-
-------------------------------------------------------------
-
-data DomainError = DomainEmptyErr
-                 | DomainLengthErr Text
-                 | DomainLabelErr DomainLabelError
-  deriving Show
-
-instance Printable DomainError where
-  print DomainEmptyErr = P.text "empty domain"
-  print (DomainLabelErr e) = print e
-
-_DomainEmptyErr ∷ Prism' DomainError ()
-_DomainEmptyErr = prism' (const DomainEmptyErr)
-                         ( \ case DomainEmptyErr → Just (); _ → Nothing )
-                    
-_DomainLabelErr ∷ Prism' DomainError DomainLabelError
-_DomainLabelErr = prism' DomainLabelErr
-                         (\ case (DomainLabelErr e) → Just e; _ → Nothing)
-
-_DomainLengthErr ∷ Prism' DomainError Text
-_DomainLengthErr = prism' DomainLengthErr
-                          (\ case (DomainLengthErr e) → Just e; _ → Nothing)
-
---------------------
-
-class AsDomainError ε where
-  _DomainError ∷ Prism' ε DomainError
-
-instance AsDomainError DomainError where
-  _DomainError = id
-
-instance AsDomainLabelError DomainError where
-  _DomainLabelError = prism' DomainLabelErr (^? _DomainLabelErr)
-    
---------------------
-
-class ToDomainError α where
-  toDomainError ∷ α → DomainError
-
-instance ToDomainError DomainError where
-  toDomainError = id
-
-instance ToDomainError DomainLabelError where
-  toDomainError = DomainLabelErr
-
-throwAsDomainError ∷ (ToDomainError α, AsDomainError ε, MonadError ε η) ⇒ α → η β
-throwAsDomainError = throwError ∘ (_DomainError ⋕) ∘ toDomainError
-    
-------------------------------------------------------------
-
-data FQDNError = FQDNNotFullyQualifiedErr Text
-               | DomainErrorErr DomainError
-  deriving Show
-
-instance Printable FQDNError where
-  print (FQDNNotFullyQualifiedErr t) =
-    P.text $ [fmt|FQDN not fully qualified: '%t'|] t
-  print (DomainErrorErr e) = print e
-
-_FQDNNotFullyQualifiedErr ∷ Prism' FQDNError Text
-_FQDNNotFullyQualifiedErr = prism' FQDNNotFullyQualifiedErr
-                                   ( \ case
-                                         (FQDNNotFullyQualifiedErr t) → Just t
-                                         _                            → Nothing
-                                   )
-                    
-_DomainErrorErr ∷ Prism' FQDNError DomainError
-_DomainErrorErr = prism' DomainErrorErr
-                         (\ case (DomainErrorErr e) → Just e; _ → Nothing)
-
---------------------
-
-class AsFQDNError ε where
-  _FQDNError ∷ Prism' ε FQDNError
-
-instance AsFQDNError FQDNError where
-  _FQDNError = id
-
-instance AsDomainError FQDNError where
-  _DomainError = prism' DomainErrorErr (^? _DomainErrorErr)
-
---------------------
-
-class ToFQDNError α where
-  toFQDNError ∷ α → FQDNError
-
-instance ToFQDNError FQDNError where
-  toFQDNError = id
-
-instance ToFQDNError DomainError where
-  toFQDNError = DomainErrorErr
-
-throwAsFQDNError ∷ (ToFQDNError α, AsFQDNError ε, MonadError ε η) ⇒ α → η β
-throwAsFQDNError = throwError ∘ (_FQDNError ⋕) ∘ toFQDNError
-    
-------------------------------------------------------------
-
-newtype DomainLabels = DomainLabels (NonEmpty DomainLabel)
-  deriving Show
-
-data DomainQualification = FQDN' | UQDN'
-  deriving Show
-
-{- | Render a domain, without a trailing dot even for FQDN, to make the 253-char
-     check that excludes any trailing dot
--}
-renderDomainLabels ∷ NonEmpty DomainLabel → Text
-renderDomainLabels ds = Data.Text.intercalate "." (toText ⊳ toList ds)
-
-instance Printable DomainLabels where
-  print (DomainLabels dls) = P.text $ renderDomainLabels dls
-
-class Domain' δ where
-  domainLabels ∷ δ → DomainLabels
-
-newtype FQDN'' = FQDN'' DomainLabels
-  deriving Show
-
-instance Domain' FQDN'' where
-  domainLabels (FQDN'' dls) = dls
-
-instance Printable FQDN'' where
-  print (FQDN'' dls) = P.text $ toText dls ⊕ "."
-
-newtype UQDN'' = UQDN'' DomainLabels
-
-instance Domain' UQDN'' where
-  domainLabels (UQDN'' dls) = dls
-
-data Domain = Domain DomainQualification DomainLabels
-  deriving Show
-
-instance Printable Domain where
-  print (Domain FQDN' dls) = print dls ⊕ "."
-  print (Domain UQDN' dls) = print dls
-
-fullyQualified ∷ Domain → Bool
-fullyQualified (Domain FQDN' _) = True
-fullyQualified (Domain UQDN' _) = False
-
-maxDomainLength ∷ Natural
-maxDomainLength = 253
-
-checkDomainLength ∷ (AsDomainError ε, MonadError ε η) ⇒
-                    NonEmpty DomainLabel → η DomainLabels
-checkDomainLength dls = let txt = renderDomainLabels dls
-                         in if length txt > maxDomainLength
-                            then throwAsDomainError $ DomainLengthErr txt
-                            else return $ DomainLabels dls
-
-parseDomainLabels ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒
-                    ρ → η DomainLabels
-parseDomainLabels (splitOn "." ∘ toText → ("" :| [])) =
-  throwAsDomainError DomainEmptyErr
-parseDomainLabels (splitOn "." ∘ toText → ds) =
-  case mapM parseDomainLabel' ds of
-    Left  dle → throwAsDomainError dle
-    Right ds' → checkDomainLength ds'
-  
-parseDomainLabels' ∷ (Printable ρ, MonadError DomainError η) ⇒
-                     ρ → η DomainLabels
-parseDomainLabels' = parseDomainLabels
-
-parseFQDN ∷ (Printable ρ, AsFQDNError ε, MonadError ε η) ⇒ ρ → η FQDN''
-parseFQDN (unsnoc ∘ toText → Nothing) =
-  throwAsFQDNError DomainEmptyErr
-parseFQDN (unsnoc ∘ toText → Just (d,'.')) =
-  either throwAsFQDNError (return ∘ FQDN'') (parseDomainLabels' d)
-{-
-  case parseDomainLabels d of
-    Left  dee → throwAsFQDNError $ DomainErrorErr dee
-    Right dls → return $ FQDN'' dls
--}
-parseFQDN d@(unsnoc ∘ toText → Just _) =
-  throwAsFQDNError $ FQDNNotFullyQualifiedErr (toText d)
-
-{-
-  case reverse $ splitOn "." (toText d) of
-    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
-    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
-      case mapM parseDomainLabel (reverse ds) of
-        Left dle → throwAsDomainError dle
-        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
-    ds        → -- unqualified
-      case mapM parseDomainLabel (reverse ds) of
-        Left dle → throwAsDomainError dle
-        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
-
-parseUQDN ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒ ρ → η UQDN''
-parseUQDN d =
-  case reverse $ splitOn "." (toText d) of
-    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
-    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
-      case mapM parseDomainLabel (reverse ds) of
-        Left dle → throwAsDomainError dle
-        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
-    ds        → -- unqualified
-      case mapM parseDomainLabel (reverse ds) of
-        Left dle → throwAsDomainError dle
-        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
--}
-
-parseDomain ∷ (Printable ρ, AsDomainError ε, MonadError ε η) ⇒ ρ → η Domain
-parseDomain d =
-  case reverse $ splitOn "." (toText d) of
-    ("" :| (nonEmpty → Nothing)) → throwAsDomainError DomainEmptyErr
-    ("" :| (nonEmpty → Just ds)) → -- fully-qualified
-      case mapM parseDomainLabel' (reverse ds) of
-        Left dle → throwAsDomainError dle
-        Right ds' → fmap (Domain FQDN') $ checkDomainLength ds'
-    ds        → -- unqualified
-      case mapM parseDomainLabel' (reverse ds) of
-        Left  dle → throwAsDomainError dle
-        Right ds' → fmap (Domain UQDN') $ checkDomainLength ds'
-
-parseDomain' ∷ (Printable ρ, MonadError DomainError η) ⇒ ρ → η Domain
-parseDomain' = parseDomain
-
-__parseDomain ∷ Printable ρ ⇒ ρ → Domain
-__parseDomain = __right ∘ parseDomain'
-
-__parseDomain' ∷ Text → Domain
-__parseDomain' = __parseDomain
-
-domain ∷ QuasiQuoter
-domain = let parseExp ∷ String → ExpQ
-             parseExp = appE (varE '__parseDomain') ∘ litE ∘ stringL
-         in mkQuasiQuoterExp "domain" parseExp
-                
-
-d ∷ QuasiQuoter
-d = domain
-
-------------------------------------------------------------
-
-data HostnameError = HostnameNotFullyQualifiedErr Text
-                   | HostnameDomainErr DomainError
-  deriving Show
-
-_HostnameNotFullyQualifiedErr ∷ Prism' HostnameError Text
-_HostnameNotFullyQualifiedErr =
-  prism' HostnameNotFullyQualifiedErr
-         ( \ case (HostnameNotFullyQualifiedErr h) → Just h; _ → Nothing )
-                    
-_HostnameDomainErr ∷ Prism' HostnameError DomainError
-_HostnameDomainErr = prism' HostnameDomainErr
-                            (\ case (HostnameDomainErr e) → Just e; _ → Nothing)
-
-instance Printable HostnameError where
-  print (HostnameNotFullyQualifiedErr h) =
-    P.text $ [fmt|hostname is not fully qualified: '%t'|] h
-  print (HostnameDomainErr e) = print e
-
-class AsHostnameError ε where
-  _HostnameError ∷ Prism' ε HostnameError
-
-throwAsHostnameError ∷ (AsHostnameError ε, MonadError ε η) ⇒ HostnameError → η α
-throwAsHostnameError = throwError ∘ (_HostnameError ⋕)
-    
-instance AsHostnameError HostnameError where
-  _HostnameError = id
-
-instance AsDomainError HostnameError where
-  _DomainError = prism' HostnameDomainErr (^? _HostnameDomainErr)
-
-------------------------------------------------------------
-
-data Hostname = Hostname FQDN''
-  deriving Show
-
-instance Printable Hostname where
-  print (Hostname dls) = print dls ⊕ "."
-
-parseHostname ∷ (Printable ρ, AsHostnameError ε, MonadError ε η) ⇒
-                ρ → η Hostname
-parseHostname (unsnoc ∘ toText → Nothing) =
-  throwAsHostnameError $ HostnameDomainErr DomainEmptyErr
-parseHostname (unsnoc ∘ toText → Just (d,'.')) =
-  throwAsHostnameError $ HostnameNotFullyQualifiedErr d
-parseHostname d@(unsnoc ∘ toText → Just (_,_)) =
-  case parseDomain d of
-    Left e → throwAsHostnameError $ HostnameDomainErr e
---    Right r
-
-{-
-parseHostname ∷ (Printable ρ, AsHostnameError ε, MonadError ε η) ⇒
-                ρ → η Hostname
-parseHostname (unsnoc ∘ toText → h) =
-  unsnoc 
-  case parseDomain h of
-    Left  e → throwAsHostnameError $ HostnameDomainErr e
-    Right h' → if fullyQualified h'
-               then return (Hostname $ _ h')
-               else throwAsHostnameError $ HostnameNotFullyQualifiedErr h
--}
-
-parseHostname' ∷ (Printable ρ, MonadError HostnameError η) ⇒ ρ → η Hostname
-parseHostname' = parseHostname
-
-__parseHostname ∷ Printable ρ ⇒ ρ → Hostname
-__parseHostname = __right ∘ parseHostname'
-
-__parseHostname' ∷ Text → Hostname
-__parseHostname' = __parseHostname
-
-hostname ∷ QuasiQuoter
-hostname = let parseExp ∷ String → ExpQ
-               parseExp = appE (varE '__parseHostname') ∘ litE ∘ stringL
-            in mkQuasiQuoterExp "hostname" parseExp
-                
-
-host ∷ QuasiQuoter
-host = hostname
-h ∷ QuasiQuoter
-h = hostname
-
-------------------------------------------------------------
-
-data Host = Host { fqdn ∷ FQDN
-                 , ipv4 ∷ IPv4
-                 , desc ∷ Text
-                 , comments ∷ [Text]
-                 , mac ∷ Maybe Text
-                 }
-  deriving (FromJSON, Generic, Show)
-
-hostType ∷ Type Host
-hostType = record $ Host ⊳ field "fqdn"     (FQDN ⊳ D.strictText)
-                         ⊵ field "ipv4"     auto
-                         ⊵ field "desc"     D.strictText
-                         ⊵ field "comments" auto
-                         ⊵ field "mac"      auto
-
-instance Interpret Host where
-  autoWith _ = hostType
-
-------------------------------------------------------------
-
-newtype FQDN = FQDN Text
-  deriving (Eq, Generic, Hashable, Ord, Show)
-
-instance Printable FQDN where
-  print (FQDN t) = P.text t
-
-emptyPartFQDN ∷ Text → String
-emptyPartFQDN t = "FQDN with empty part: '" ⊕ unpack t ⊕ "'"
-
-noPartsFQDN ∷ Text → String
-noPartsFQDN t = "FQDN with no parts: '" ⊕ unpack t ⊕ "'"
-
-badFQDN ∷ Text → String
-badFQDN t = "bad FQDN: '" ⊕ unpack t ⊕ "'"
-
-isAlphaNumU ∷ Char → Bool
-isAlphaNumU '_' = True
-isAlphaNumU c   = isAlphaNum c
-
-instance FromJSON FQDN where
-  parseJSON (String "")                = fail "empty FQDN"
-  parseJSON (String t)
-                   | F.length (splitOn "." t) < 2 = fail $ noPartsFQDN t
-                   | F.any null (splitOn "." t) = fail $ emptyPartFQDN t
-                   | F.all (all isAlphaNumU) (splitOn "." t) = return $ FQDN t
-                   | otherwise         = fail $ badFQDN t
-  parseJSON invalid                    = typeMismatch "short host name" invalid
-
-localPart ∷ FQDN → UQDN
-localPart (FQDN h) = UQDN (takeWhile (≢ '.') h)
-
-------------------------------------------------------------
-
-{- | hostname, no FQDN. -}
-newtype UQDN = UQDN { unUQDN ∷ Text }
-  deriving (Eq, Generic, Hashable, Ord, Show)
-
-instance Printable UQDN where
-  print (UQDN h) = P.text h
-
-badShortHostName ∷ Text → String
-badShortHostName t = "bad short host name: '" ⊕ unpack t ⊕ "'"
-
-uqdnType ∷ Type UQDN
-uqdnType = UQDN ⊳ D.strictText
-
-instance Interpret UQDN where
-  autoWith _ = uqdnType
-
-instance FromJSON UQDN where
-  parseJSON (String "")                = fail "empty unqualified host name"
-  parseJSON (String t)
-                   | all isAlphaNumU t = return $ UQDN t
-                   | otherwise         = fail $ badShortHostName t
-  parseJSON invalid                    = typeMismatch "short host name" invalid
-
-------------------------------------------------------------
-
-type UQHMap = HashMap UQDN
-
-------------------------------------------------------------
-
-newtype IPv4 = IPv4 IP4
-  deriving (Eq, Ord, Show)
-
-instance FromJSON IPv4 where
-  parseJSON (String t) = case parseText t of
-                           Parsed ip4 → return $ IPv4 ip4
-                           Malformed _ e → fail (e ⊕ " (" ⊕ unpack t ⊕ ")")
-  parseJSON invalid    = typeMismatch "IPv4" invalid
-
-instance Printable IPv4 where
-  print (IPv4 ipv4) = P.text (toText ipv4)
-
-------------------------------------------------------------
-
-newtype HostMap = HostMap { unHostMap ∷ UQHMap Host }
-  deriving Show
 
 instance FromJSON HostMap where
   parseJSON (Object hm) =
-    let go ∷ (Text,Value) → Yaml.Parser (UQDN, Host)
-        go (k,Object v) = parseJSON (Object v) ≫ return ∘ (UQDN k,)
+    let go ∷ (Text,Value) → Yaml.Parser (Localname, Host)
+        go (k,v@(Object _)) = returnPair (leftFail $ parseLocalname' k, parseJSON v)
         go (k,invalid)  =
           typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
      in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
@@ -716,7 +237,7 @@ hmHosts ∷ HostMap → [Host]
 hmHosts (HostMap hm) = elems hm
 
 hostMapType ∷ Type HostMap
-hostMapType = let localHNKey h = (localPart (fqdn h), h)
+hostMapType = let localHNKey h = (hostlocal (hname h), h)
                in HostMap ∘ __fromList ∘ fmap localHNKey ⊳ D.list hostType
 
 instance Interpret HostMap where
@@ -724,53 +245,58 @@ instance Interpret HostMap where
 
 ------------------------------------------------------------
 
-newtype ShortHostMap = ShortHostMap { unSHMap ∷ UQHMap UQDN }
-  deriving Show
+newtype LocalHostMap = LocalHostMap { unSHMap ∷ HashMap Localname Localname }
+  deriving (Eq, Show)
 
-data LocalAlias = LocalAlias UQDN UQDN
+data LocalAlias = LocalAlias Localname Localname
 
 localAliasType ∷ Type LocalAlias
-localAliasType = record $ LocalAlias ⊳ field "from" uqdnType
-                                     ⊵ field "to"   uqdnType
+localAliasType = record $ LocalAlias ⊳ field "from" auto
+                                     ⊵ field "to"   auto
 
 instance Interpret LocalAlias where
   autoWith _ = localAliasType
 
-localAliasPair ∷ LocalAlias → (UQDN,UQDN)
-localAliasPair (LocalAlias from to) = (from,to)
+localAliasPair ∷ LocalAlias → (Localname,Localname)
+localAliasPair (LocalAlias aliasFrom aliasTo) = (aliasFrom,aliasTo)
 
-shortHostMapType ∷ Type ShortHostMap
+shortHostMapType ∷ Type LocalHostMap
 shortHostMapType =
-  ShortHostMap ⊳ __fromList ∘ fmap localAliasPair ⊳ D.list localAliasType
+  LocalHostMap ⊳ __fromList ∘ fmap localAliasPair ⊳ D.list localAliasType
 
-instance Interpret ShortHostMap where
+instance Interpret LocalHostMap where
   autoWith _ = shortHostMapType
 
-instance FromJSON ShortHostMap where
+instance FromJSON LocalHostMap where
   parseJSON (Object hm) =
-    let go ∷ (Text,Value) → Yaml.Parser (UQDN, UQDN)
-        go (k,String v) = return (UQDN k, UQDN v)
+    let go' ∷ MonadError LocalnameError η ⇒ (Text,Text) → η (Localname,Localname)
+        go' (k, v) = do k' ← parseLocalname' k
+                        v' ← parseLocalname' v
+                        return (k',v')
+        go ∷ (Text,Value) → Yaml.Parser (Localname, Localname)
+        go (k,String v) = either (fail ∘ toString) return $ go' (k,v)
+--          return (UQDN k, UQDN v)
         go (k,invalid)  =
           typeMismatch (unpack $ "short host name: '" ⊕ k ⊕ "'") invalid
      in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
           Left dups → fail $ toString dups
-          Right hm' → return $ ShortHostMap hm'
+          Right hm' → return $ LocalHostMap hm'
   parseJSON invalid     = typeMismatch "short host map" invalid
 
 ------------------------------------------------------------
 
 data Hosts = Hosts { hosts        ∷ HostMap
-                   , dns_servers  ∷ [UQDN]
-                   , mail_servers ∷ [UQDN]
-                   , aliases      ∷ ShortHostMap
+                   , dns_servers  ∷ [Localname]
+                   , mail_servers ∷ [Localname]
+                   , aliases      ∷ LocalHostMap
                    }
-  deriving (FromJSON, Generic)
+  deriving (Eq, FromJSON, Generic)
 
 
 hostsType ∷ Type Hosts
 hostsType = record $ Hosts ⊳ field "hosts"        hostMapType
-                           ⊵ field "dns_servers"  (D.list uqdnType)
-                           ⊵ field "mail_servers" (D.list uqdnType)
+                           ⊵ field "dns_servers"  (D.list auto)
+                           ⊵ field "mail_servers" (D.list auto)
                            ⊵ field "aliases"      shortHostMapType
 
 instance Interpret Hosts where
@@ -784,13 +310,13 @@ instance Show Hosts where
                             , "ALIASES:      " ⊕ show (aliases h)
                             ]
 
-lookupHost ∷ Hosts → UQDN → Maybe Host
+lookupHost ∷ Hosts → Localname → Maybe Host
 lookupHost = flip lookup ∘ unHostMap ∘ hosts
 
-hostIPv4 ∷ Hosts → UQDN → Maybe IPv4
+hostIPv4 ∷ Hosts → Localname → Maybe IP4
 hostIPv4 hs h = ipv4 ⊳ lookupHost hs h
 
-hostIPv4' ∷ Hosts → UQDN → Either Text IPv4
+hostIPv4' ∷ Hosts → Localname → Either Text IP4
 hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
                      noSuchH = "hostIPv4': no such host " ⊕ quote h
                  in maybe (Left noSuchH) Right $ hostIPv4 hs h
@@ -798,8 +324,8 @@ hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
 hostsHosts ∷ Hosts → [Host]
 hostsHosts = hmHosts ∘ hosts
 
-hostIPv4s ∷ Hosts → [(FQDN,IPv4)]
-hostIPv4s = fmap ( \ h → (fqdn h, ipv4 h) ) ∘ hostsHosts
+hostIPv4s ∷ Hosts → [(Hostname,IP4)]
+hostIPv4s = fmap ( \ h → (hname h, ipv4 h) ) ∘ hostsHosts
 
 ------------------------------------------------------------
 
@@ -840,30 +366,164 @@ __loadFileDhall__ fn = liftIO $
 domains ∷ [Text]
 domains = ["sixears.co.uk", "0.168.192.in-addr.arpa"];
 
+-- XXX
+myDomain ∷ FQDN
+myDomain = [fqdn|sixears.co.uk|]
+
 ----------------------------------------
 
-addNSCmd ∷ AbsFile → AbsFile → IPv4 → [CmdSpec]
+addNSCmd ∷ AbsFile → AbsFile → IP4 → [CmdSpec]
 addNSCmd fn tmpfn ip = ( \ d → CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "ns", toText d, toText ip ] ) ⊳ domains
 
 ----------------------------------------
 
 addHostCmd ∷ AbsFile → AbsFile → Host → [CmdSpec]
-addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "host", toText $ fqdn h, toText $ ipv4 h ] ]
+addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "host", toText $ hname h, toText $ ipv4 h ] ]
 
 ----------------------------------------
 
-addAliasCmd ∷ AbsFile → AbsFile → FQDN → Host → CmdSpec
-addAliasCmd fn tmpfn fqdn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText fqdn, toText $ ipv4 h ]
+addAliasCmd ∷ AbsFile → AbsFile → Hostname → Host → CmdSpec
+addAliasCmd fn tmpfn hname h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText hname, toText $ ipv4 h ]
 
 ----------------------------------------
 
 addMxCmd ∷ AbsFile → AbsFile → Host → CmdSpec
-addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "mx", toText (fqdn h), toText $ ipv4 h ]
+addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "mx", toText (hname h), toText $ ipv4 h ]
+
+----------------------------------------
+
+_test ∷ IO ()
+_test = defaultMain tests
+
+_tests ∷ String → IO ()
+_tests p = runTestsP_ tests p
+
+{- | like `withResource`, but with a no-op release resource -}
+withResource' ∷ IO α → (IO α → TestTree) → TestTree
+withResource' = flip withResource (const $ return ())
+
+tests ∷ TestTree
+tests = testGroup "mktinydnsdata" [ DomainNames.T.FQDN.tests
+                                  , HostsDB.T.Host.tests
+                                  , withResource' (D.input hostsType hostsTestText)
+                                                  hostsDhallTests'
+                                  ]
+
+domainNamesTests ∷ TestTree
+domainNamesTests = testGroup "DomainNames tests" [ DomainNames.T.FQDN.tests
+                                                 , HostsDB.T.Host.tests ]
+
+hostsTestHosts ∷ Hosts
+hostsTestHosts =
+  let chrome = Host [hostname|chrome.sixears.co.uk.|] [ip4|192.168.0.6|]
+                "study desktop server" [ "fc:aa:14:87:cc:a2" ] Nothing
+      winxp  = Host [hostname|winxp.sixears.co.uk.|] [ip4|192.168.0.87|]
+                    "VirtualBox on Chrome" [ "08:00:27:23:08:43" ] Nothing
+      cargo  = Host [hostname|cargo.sixears.co.uk.|] [ip4|192.168.0.9|]
+                    "DVR" [ "e0:cb:4e:ba:be:60" ] Nothing
+      expHostMap = HostMap $ HashMap.fromList [ ([localname|winxp|] , winxp)
+                                              , ([localname|chrome|], chrome)
+                                              , ([localname|cargo|] , cargo)
+                                              ]
+   in Hosts expHostMap [ [localname|cargo|], [localname|chrome|] ]
+                       [ [localname|cargo|] ]
+                       (LocalHostMap $ HashMap.fromList
+                          [ ([localname|mailhost|], [localname|cargo|])
+                          , ([localname|www|]     , [localname|chrome|])
+                          , ([localname|cvs|]     , [localname|chrome|])
+                          ]
+                       )
+
+hostsDhallTests' ∷ IO Hosts → TestTree
+hostsDhallTests' hs =
+  testGroup "hostsDhallTests" $ assertListEqIO "hosts"
+                                              (otoList $ hosts hostsTestHosts)
+                                              (otoList ∘ hosts ⊳ hs)
+  
+hostsTestText ∷ Text
+hostsTestText =
+  unlines [ "{ aliases = [ { from = \"mailhost\", to = \"cargo\"}"
+          , "            , { from = \"www\",      to = \"chrome\"}"
+          , "            , { from = \"cvs\",      to = \"chrome\"}"
+          , "            ]"
+          , ", dns_servers = [ \"cargo\", \"chrome\" ]"
+          , ", mail_servers = [ \"cargo\" ]"
+          , ""
+          , ", hosts = [ { fqdn = \"chrome.sixears.co.uk.\""
+          , "            , ipv4 = \"192.168.0.6\""
+          , "            , desc = \"study desktop server\""
+          , "            , mac= [ \"fc:aa:14:87:cc:a2\" ] : Optional Text"
+          , "            , comments = [] : List Text"
+          , "            }"
+          , "          , { fqdn = \"winxp.sixears.co.uk.\""
+          , "            , ipv4 = \"192.168.0.87\""
+          , "            , desc = \"VirtualBox on Chrome\""
+          , "            , mac= [ \"08:00:27:23:08:43\" ] : Optional Text"
+          , "            , comments = [] : List Text"
+          , "            }"
+          , ""
+          , "          , { fqdn = \"cargo.sixears.co.uk.\""
+          , "            , ipv4 = \"192.168.0.9\""
+          , "            , desc = \"DVR\""
+          , "            , mac  = [ \"e0:cb:4e:ba:be:60\" ] : Optional Text"
+          , "            , comments = [] : List Text"
+          , "            }"
+          , "          ]"
+          , "}"
+          ]
+
+initIORef :: IORef Bool -> IO (IORef Bool)
+initIORef ref = do
+  v <- readIORef ref
+  if v
+    then assertFailure "resource was already initialized!"
+    else writeIORef ref True
+  return ref
+
+releaseIORef :: IORef Bool -> IO ()
+releaseIORef ref = do
+  v <- readIORef ref
+  if not v
+    then assertFailure "resource was not initialized!"
+  else writeIORef ref False
 
 ----------------------------------------
 
 main ∷ IO ()
 main = do
+  let testText =
+        unlines [ "{ aliases = [ { from = \"mailhost\", to = \"cargo\"}"
+                , "            , { from = \"www\",      to = \"chrome\"}"
+                , "            , { from = \"cvs\",      to = \"chrome\"}"
+                , "            ]"
+                , ", dns_servers = [ \"cargo\", \"chrome\" ]"
+                , ", mail_servers = [ \"cargo\" ]"
+                , ""
+                , ", hosts = [ { fqdn = \"chrome.sixears.co.uk.\""
+                , "            , ipv4 = \"192.168.0.6\""
+                , "            , desc = \"study desktop server\""
+                , "            , mac= [ \"fc:aa:14:87:cc:a2\" ] : Optional Text"
+                , "            , comments = [] : List Text"
+                , "            }"
+                , "          , { fqdn = \"winxp.sixears.co.uk.\""
+                , "            , ipv4 = \"192.168.0.87\""
+                , "            , desc = \"VirtualBox on Chrome\""
+                , "            , mac= [ \"08:00:27:23:08:43\" ] : Optional Text"
+                , "            , comments = [] : List Text"
+                , "            }"
+                , ""
+                , "          , { fqdn = \"cargo.sixears.co.uk.\""
+                , "            , ipv4 = \"192.168.0.9\""
+                , "            , desc = \"DVR\""
+                , "            , mac  = [ \"e0:cb:4e:ba:be:60\" ] : Optional Text"
+                , "            , comments = [] : List Text"
+                , "            }"
+                , "          ]"
+                , "}"
+                ]
+
+  D.input hostsType testText ≫ putStrLn ∘ show
+
   cwd  ← getCwd_
   opts ← optParser "make tiny dns data from hosts config" (parseOptions cwd)
   let infn = opts ⊣ input
@@ -879,8 +539,12 @@ main = do
 
 ----------------------------------------
 
-runProc ∷ CmdSpec → IO (Either ExecCreateError ())
-runProc = splitMError ∘ runProcIO (defRunProcOpts & verboseL ⊢ 1) ∘ mkProc_
+runProc ∷ (MonadIO μ, AsCreateProcError ε, AsExecError ε, MonadError ε μ) ⇒
+          CmdSpec → μ ()
+runProc = runProcIO (defRunProcOpts & verboseL ⊢ 1) ∘ mkProc_
+
+runProc' ∷ CmdSpec → IO (Either ExecCreateError ())
+runProc' = splitMError ∘ runProc
 
 ----------------------------------------
 
@@ -889,22 +553,61 @@ runProc = splitMError ∘ runProcIO (defRunProcOpts & verboseL ⊢ 1) ∘ mkProc
 -- allJusts ∷ MonadError ε η ⇒ (α → ε) → HashMap α (Maybe β) → η (HashMap α β)
 -- allJusts err hm =
 
+-- addAliasCmds ∷ AbsFile → AbsFile → FQDN → HashMap Localname Host
+--              → IO (Either DomainError [Either ExecCreateError ()])
+addAliasCmds ∷ (MonadIO μ, AsExecError ε, AsCreateProcError ε, AsDomainError ε,
+                MonadError ε μ) ⇒
+               AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
+addAliasCmds fn1 fn2 d as = mapM (\ (a,h) → a <..> d ≫ \ c → return $ addAliasCmd fn1 fn2 c h) (HashMap.toList as) ≫ mapM_ runProc
+
+data ExecCreateDomainError = ECDExecCreateE ExecCreateError
+                           | ECDDomainE     DomainError
+
+instance Printable ExecCreateDomainError where
+  print (ECDExecCreateE e) = P.string (show e)
+  print (ECDDomainE e)     = print e
+
+_ECDExecCreateE ∷ Prism' ExecCreateDomainError ExecCreateError
+_ECDExecCreateE = prism' ECDExecCreateE (\ case (ECDExecCreateE e) → Just e; _ → Nothing)
+
+
+instance AsExecError ExecCreateDomainError where
+  _ExecError = prism' (ECDExecCreateE ∘ ECExecE)
+                      (\ case (ECDExecCreateE (ECExecE e)) → Just e
+                              _                              → Nothing)
+instance AsCreateProcError ExecCreateDomainError where
+  _CreateProcError = prism' (ECDExecCreateE ∘ ECCreateE)
+                            (\ case (ECDExecCreateE (ECCreateE e)) → Just e
+                                    _                                → Nothing)
+
+instance AsDomainError ExecCreateDomainError where
+  _DomainError = prism' ECDDomainE
+                        (\ case (ECDDomainE e) → Just e; _ → Nothing)
+
+addAliasCmds' ∷ (MonadIO μ, MonadError ExecCreateDomainError μ) ⇒
+                AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
+addAliasCmds' = addAliasCmds
+
+addAliasCmds''  ∷ MonadIO μ ⇒
+                  AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
+addAliasCmds'' fn1 fn2 d as = __right ⊳ (splitMError $ addAliasCmds' fn1 fn2 d as)
+
 __mkData__ ∷ Hosts → (AbsFile, _z0) → (AbsFile, _z1) → IO ()
 __mkData__ hs (fn1,_) (fn2,_) = do
   case partitionEithers $ ( \ h → hostIPv4' hs h) ⊳ dns_servers hs of
-    ([], ips) → do forM_ ips $ \ ip → forM_ (addNSCmd fn1 fn2 ip) $ runProc
+    ([], ips) → do forM_ ips $ \ ip → forM_ (addNSCmd fn1 fn2 ip) $ runProc'
 
     (es, _)   → die (ExitFailure 3) (unlines es)
 
-  forM_ (addHostCmd fn1 fn2 ⊳ (sortOn ipv4 $ hostsHosts hs)) (mapM_ runProc)
+  forM_ (addHostCmd fn1 fn2 ⊳ (sortOn ipv4 $ hostsHosts hs)) (mapM_ runProc')
 
   case forM (unSHMap $ aliases hs) ( \ h → maybeE h (lookupHost hs h) ) of
-    Left  h → die (ExitFailure 3) h
-    Right as → mapM_ runProc $ foldrWithKey ( \ u h a → addAliasCmd fn1 fn2 (FQDN (toText u ⊕ "." ⊕ domains !! 0)) h : a) [] as
+    Left  h  → die (ExitFailure 3) h
+    Right as → addAliasCmds'' fn1 fn2 myDomain as
 
   case forM (( \ h → (h,lookupHost hs h)) ⊳ mail_servers hs) ( \ (hn,mh) → maybeE hn mh) of
     Left  h → die (ExitFailure 3) h
-    Right as → mapM_ runProc $ ( addMxCmd fn1 fn2 ) ⊳ as
+    Right as → mapM_ runProc' $ ( addMxCmd fn1 fn2 ) ⊳ as
 
 
   Data.Text.IO.readFile (toString fn1) ≫ Data.Text.IO.putStrLn
@@ -961,35 +664,5 @@ __withTemps__ io = let pfx1 = Just [pc|tinydns-data-|]
                     in (splitMError $ with2TempFiles' pfx1 pfx2 io) ≫ \ case
                        Left e → die (ExitFailure 4) e
                        Right r → return r
-
-
-------------------------------------------------------------
---                       dhallisms                        --
-------------------------------------------------------------
-
-instance Parsecable IPv4 where
-  parser = fmap IPv4 $ ip4FromOctets ⊳ parser ⋪ char '.'
-                                     ⊵ parser ⋪ char '.'
-                                     ⊵ parser ⋪ char '.'
-                                     ⊵ parser
-
-
-{-| quasi-quoter for ipv4 addresses -}
-ip4 ∷ QuasiQuoter
-ip4 = mkQuasiQuoterExp "ip4" ( \ t → appE (varE '__parsecN) (litE $ stringL t) )
-
-mkQuasiQuoterExp ∷ Text → (String → ExpQ) → QuasiQuoter
-mkQuasiQuoterExp n f = let notImpl u = error $ [fmt|%t %t  not implemented|] n u
-                        in QuasiQuoter { quoteDec  = notImpl "quoteDec"
-                                       , quoteType = notImpl "quoteType"
-                                       , quotePat  = notImpl "quotePat"
-                                       , quoteExp = f
-                                       }
-
-instance Interpret IPv4 where
-  autoWith _ = Type {..}
-               where extract (DC.TextLit (DC.Chunks [] t)) = pure $ __parsecN t
-                     extract _                             = empty
-                     expected = DC.Text
 
 -- that's all, folks! ----------------------------------------------------------
