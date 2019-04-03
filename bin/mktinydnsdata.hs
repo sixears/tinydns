@@ -198,8 +198,8 @@ addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, 
 
 ----------------------------------------
 
-addAliasCmd ∷ AbsFile → AbsFile → Hostname → Host → CmdSpec
-addAliasCmd fn tmpfn hname h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText hname, toText $ ipv4 h ]
+addAliasCmd ∷ AbsFile → AbsFile → Host → Hostname → CmdSpec
+addAliasCmd fn tmpfn h hname = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText hname, toText $ ipv4 h ]
 
 ----------------------------------------
 
@@ -234,17 +234,12 @@ runProc' = splitMError ∘ runProc
 
 ----------------------------------------
 
--- | Take a hashmap from α to Maybe β; and an error function; throw an error for any
---   `Nothing`s; otherwise return a hashmap from α to β.
--- allJusts ∷ MonadError ε η ⇒ (α → ε) → HashMap α (Maybe β) → η (HashMap α β)
--- allJusts err hm =
-
--- addAliasCmds ∷ AbsFile → AbsFile → FQDN → HashMap Localname Host
---              → IO (Either DomainError [Either ExecCreateError ()])
 addAliasCmds ∷ (MonadIO μ, AsExecError ε, AsCreateProcError ε, AsDomainError ε,
                 MonadError ε μ) ⇒
                AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
-addAliasCmds fn1 fn2 d as = mapM (\ (a,h) → a <..> d ≫ \ c → return $ addAliasCmd fn1 fn2 c h) (HashMap.toList as) ≫ mapM_ runProc
+addAliasCmds fn1 fn2 d as =
+  let go (a,h) = a <..> d ≫ return ∘ addAliasCmd fn1 fn2 h
+  in mapM go (HashMap.toList as) ≫ mapM_ runProc
 
 data ExecCreateDomainError = ECDExecCreateE ExecCreateError
                            | ECDDomainE     DomainError
