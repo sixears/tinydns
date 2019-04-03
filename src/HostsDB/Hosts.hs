@@ -60,15 +60,15 @@ import qualified  Data.HashMap.Strict  as  HashMap
 ------------------------------------------------------------
 
 import HostsDB.Host          ( Host, hname, ipv4 )
-import HostsDB.HostMap       ( HostMap, hmHosts, unHostMap )
-import HostsDB.LocalHostMap  ( LocalHostMap )
+import HostsDB.LHostMap      ( LHostMap, lhmHosts, unLHostMap )
+import HostsDB.LocalnameMap  ( LocalnameMap )
 
 --------------------------------------------------------------------------------
 
-data Hosts = Hosts { hosts        ∷ HostMap
+data Hosts = Hosts { hosts        ∷ LHostMap
                    , dns_servers  ∷ [Localname]
                    , mail_servers ∷ [Localname]
-                   , aliases      ∷ LocalHostMap
+                   , aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
 
@@ -90,7 +90,7 @@ instance Show Hosts where
                             ]
 
 lookupHost ∷ Hosts → Localname → Maybe Host
-lookupHost = flip HashMap.lookup ∘ unHostMap ∘ hosts
+lookupHost = flip HashMap.lookup ∘ unLHostMap ∘ hosts
 
 hostIPv4 ∷ Hosts → Localname → Maybe IP4
 hostIPv4 hs h = ipv4 ⊳ lookupHost hs h
@@ -101,7 +101,7 @@ hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
                  in maybe (Left noSuchH) Right $ hostIPv4 hs h
 
 hostsHosts ∷ Hosts → [Host]
-hostsHosts = hmHosts ∘ hosts
+hostsHosts = lhmHosts ∘ hosts
 
 hostIPv4s ∷ Hosts → [(Hostname,IP4)]
 hostIPv4s = fmap ( \ h → (hname h, ipv4 h) ) ∘ hostsHosts

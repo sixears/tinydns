@@ -46,13 +46,15 @@ cabal-version:        >=1.10
 library
   ghc-options:        -W -Wall -fhelpful-errors
   -- Modules exported by the library.
-  exposed-modules:    Fluffy.Applicative, Fluffy.Either, Fluffy.Foldable2
-                    , Fluffy.Functor2, Fluffy.Indexable, Fluffy.IO.Error2
-                    , Fluffy.IP4, Fluffy.Lens2, Fluffy.List, Fluffy.Map
+  exposed-modules:    Fluffy.Applicative, Fluffy.Either, Fluffy.Equalish
+                    , Fluffy.Foldable2, Fluffy.Functor2, Fluffy.Indexable
+                    , Fluffy.IO.Error2, Fluffy.IP4, Fluffy.Lens2, Fluffy.List
+                    , Fluffy.MACAddress, Fluffy.T.MACAddress, Fluffy.Map
                     , Fluffy.Monad, Fluffy.MonadIO2, Fluffy.Natural
                     , Fluffy.Parsec2, Fluffy.Parsec.Error2, Fluffy.Path2
                     , Fluffy.Printable, Fluffy.Quasi, Fluffy.Tasty2
-                    , Fluffy.TempFile2, Fluffy.Text2, Fluffy.ToNatural
+                    , Fluffy.TempFile2, Fluffy.Text2, Fluffy.Textual
+                    , Fluffy.ToNatural
     
                     , DomainNames.Constants
                     , DomainNames.Domain
@@ -63,12 +65,18 @@ library
                     , DomainNames.FQDN
                     , DomainNames.T.FQDN
                     , DomainNames.Hostname
+                    , DomainNames.T.Hostname
                     , DomainNames.Error.LocalnameError
                     , DomainNames.UQDN
                     , DomainNames.Error.UQDNError
 
                     , HostsDB.Host
                     , HostsDB.T.Host
+                    , HostsDB.HostMap
+                    , HostsDB.LHostMap
+                    , HostsDB.Hosts
+                    , HostsDB.T.Hosts
+                    , HostsDB.LocalnameMap
 
                     , TinyDNS.Paths
 
@@ -82,8 +90,10 @@ library
   -- Other library packages from which modules are imported.
   build-depends:       aeson, base, base-unicode-symbols, data-textual, dhall
                      , hashable, lens, mono-traversable, mtl, network-ip, parsec
-                     , path, safe, tasty, tasty-hunit, template-haskell, temporary
-                     , text, text-printer, Unique, yaml
+                     , parsers, path, QuickCheck, safe, scientific, tasty
+                     , tasty-hunit, tasty-quickcheck, template-haskell
+                     , temporary, text, text-printer, Unique
+                     , unordered-containers, yaml
 
                      , fluffy >= 0.2.6.0, tfmt
 
@@ -102,11 +112,9 @@ executable mktinydnsdata
   -- add ?RTS -xt -hy to produce a usage graph
   main-is:             mktinydnsdata.hs
   hs-source-dirs:      bin
-  build-depends:       aeson, base, base-unicode-symbols, bytestring
-                     , data-textual, dhall, lens, mono-traversable
-                     , mtl, optparse-applicative, parsec, path, split, tasty
-                     , tasty-hunit, text, text-printer, unordered-containers
-                     , yaml
+  build-depends:       base, base-unicode-symbols, bytestring, data-textual
+                     , dhall, lens, mtl, optparse-applicative, path, split
+                     , text, text-printer, unordered-containers, yaml
 
                      , fluffy >= 0.2.6.0, proclib >= 3.1.1.0, tfmt
                      , tinydns

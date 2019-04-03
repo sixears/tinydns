@@ -5,9 +5,9 @@
 {-# LANGUAGE TypeFamilies      #-}
 {-# LANGUAGE UnicodeSyntax     #-}
 
-module HostsDB.HostMap
-  ( HostMap( HostMap ), HostRelation( HostRelation, hrkey, hrvalue )
-  , hmHosts, unHostMap )
+module HostsDB.LHostMap
+  ( LHostMap( LHostMap ), LocalHostRelation( LocalHostRelation, lname, lhost )
+  , lhmHosts, unLHostMap )
 where
 
 -- aeson -------------------------------
@@ -41,7 +41,7 @@ import Dhall  ( Interpret( autoWith ), Type )
 
 -- domainnames -------------------------
 
-import DomainNames.Hostname  ( Hostname, parseHostname' )
+import DomainNames.Hostname  ( Localname, hostlocal, parseLocalname' )
 
 -- fluffy ------------------------------
 
@@ -86,62 +86,63 @@ import HostsDB.Host  ( Host, hname, hostType )
 
 --------------------------------------------------------------------------------
 
-newtype HostMap = HostMap { unHostMap ∷ HashMap.HashMap Hostname Host }
+newtype LHostMap = LHostMap { unLHostMap ∷ HashMap.HashMap Localname Host }
   deriving (Eq, Show)
 
-instance HasLength HostMap where
-  length = length ∘ unHostMap
+instance HasLength LHostMap where
+  length = length ∘ unLHostMap
 
-data HostRelation = HostRelation { hrkey ∷ Hostname, hrvalue ∷ Host }
+data LocalHostRelation = LocalHostRelation { lname ∷ Localname, lhost ∷ Host }
   deriving Eq
 
-instance Printable HostRelation where
-  print (HostRelation nm hst) = P.text $ [fmt|(%T → %T)|] nm hst
+instance Printable LocalHostRelation where
+  print (LocalHostRelation nm hst) = P.text $ [fmt|(%T → %T)|] nm hst
 
-type instance Element HostMap = HostRelation
-instance MonoFoldable HostMap where
-  ofoldMap ∷ Monoid ξ ⇒ (HostRelation → ξ) → HostMap → ξ
+type instance Element LHostMap = LocalHostRelation
+instance MonoFoldable LHostMap where
+  ofoldMap ∷ Monoid ξ ⇒ (LocalHostRelation → ξ) → LHostMap → ξ
   ofoldMap f hm =
-    HashMap.foldlWithKey' (\ a k v → a ⊕ f (HostRelation k v)) ∅ hm
+    HashMap.foldlWithKey' (\ a k v → a ⊕ f (LocalHostRelation k v)) ∅ hm
 
-  ofoldr ∷ (HostRelation → α → α) → α → HostMap → α
-  ofoldr f init (HostMap hm) =
-    HashMap.foldrWithKey (\ k v a → f (HostRelation k v) a) init hm
+  ofoldr ∷ (LocalHostRelation → α → α) → α → LHostMap → α
+  ofoldr f init (LHostMap hm) =
+    HashMap.foldrWithKey (\ k v a → f (LocalHostRelation k v) a) init hm
 
-  ofoldl' ∷ (α → HostRelation → α) → α → HostMap → α
-  ofoldl' f init (HostMap hm) =
-    HashMap.foldlWithKey' (\ a k v → f a (HostRelation k v)) init hm
+  ofoldl' ∷ (α → LocalHostRelation → α) → α → LHostMap → α
+  ofoldl' f init (LHostMap hm) =
+    HashMap.foldlWithKey' (\ a k v → f a (LocalHostRelation k v)) init hm
 
-  ofoldr1Ex ∷ (HostRelation → HostRelation → HostRelation)
-            → HostMap → HostRelation
-  ofoldr1Ex f (HostMap hm) =
-    ofoldr1Ex f (uncurry HostRelation ⊳ HashMap.toList hm)
+  ofoldr1Ex ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
+            → LHostMap → LocalHostRelation
+  ofoldr1Ex f (LHostMap hm) =
+    ofoldr1Ex f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
 
-  ofoldl1Ex' ∷ (HostRelation → HostRelation → HostRelation)
-             → HostMap → HostRelation
-  ofoldl1Ex' f (HostMap hm) =
-    ofoldl1Ex' f (uncurry HostRelation ⊳ HashMap.toList hm)
+  ofoldl1Ex' ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
+             → LHostMap → LocalHostRelation
+  ofoldl1Ex' f (LHostMap hm) =
+    ofoldl1Ex' f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
 
 
-instance FromJSON HostMap where
+instance FromJSON LHostMap where
   parseJSON (Object hm) =
-    let go ∷ (Text,Value) → Yaml.Parser (Hostname, Host)
-        go (k,v@(Object _)) = returnPair (leftFail $ parseHostname' k, parseJSON v)
-        go (k,invalid)  =
+    let go ∷ (Text,Value) → Yaml.Parser (Localname, Host)
+        go (k,v@(Object _)) =
+          returnPair (leftFail $ parseLocalname' k, parseJSON v)
+        go (k,invalid)      =
           typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
      in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
           Left  dups → fail $ toString dups
-          Right hm'  → return $ HostMap hm'
+          Right hm'  → return $ LHostMap hm'
   parseJSON invalid = typeMismatch "host map" invalid
 
-hmHosts ∷ HostMap → [Host]
-hmHosts (HostMap hm) = HashMap.elems hm
+lhmHosts ∷ LHostMap → [Host]
+lhmHosts (LHostMap hm) = HashMap.elems hm
 
-hostMapType ∷ Type HostMap
-hostMapType = let hnKey h = (hname h, h)
-               in HostMap ∘ __fromList ∘ fmap hnKey ⊳ D.list hostType
+hostMapType ∷ Type LHostMap
+hostMapType = let localHNKey h = (hostlocal (hname h), h)
+               in LHostMap ∘ __fromList ∘ fmap localHNKey ⊳ D.list hostType
 
-instance Interpret HostMap where
+instance Interpret LHostMap where
   autoWith _ = hostMapType
 
 -- that's all, folks! ----------------------------------------------------------

@@ -8,42 +8,72 @@ where
 
 -- base --------------------------------
 
-import Data.Function  ( ($) )
+import Data.Maybe     ( Maybe( Just, Nothing ) )
+import Data.String    ( String )
+import System.IO      ( IO )
 
 -- domainnames -------------------------
 
-import DomainNames.Hostname  ( hostname, __parseHostname', parseHostname' )
+import DomainNames.Hostname  ( hostname )
 
--- data-textual ------------------------
+-- dhall -------------------------------
 
-import Data.Textual  ( toString, toText ) 
+import qualified  Dhall  as  D
+
+import Dhall  ( auto )
 
 -- fluffy ------------------------------
 
-import Fluffy.Tasty   ( assertRight )
-import Fluffy.Tasty2  ( (≟) )
+import Fluffy.Equalish    ( (≏) )
+import Fluffy.IP4         ( ip4 )
+import Fluffy.MACAddress  ( macAddress )
+import Fluffy.Tasty       ( runTestsP_ )
+import Fluffy.Tasty2      ( (≟), ioTests, withResource' )
 
 -- tasty -------------------------------
 
-import Test.Tasty  ( TestTree, testGroup )
-
--- tasty-hunit -------------------------
-
-import Test.Tasty.HUnit  ( assertEqual, testCase )
+import Test.Tasty  ( TestTree, defaultMain, testGroup )
 
 -- text --------------------------------
 
-import Data.Text  ( Text )
+import Data.Text  ( Text, unlines )
+
+------------------------------------------------------------
+--                     local imports                      --
+------------------------------------------------------------
+
+import HostsDB.Host  ( Host( Host ) )
 
 --------------------------------------------------------------------------------
 
+chromeTxt ∷ Text
+chromeTxt = unlines [ " { fqdn = \"chrome.sixears.co.uk.\""
+                    , " , ipv4 = \"192.168.0.6\""
+                    , " , desc = \"study desktop server\""
+                    , " , mac= [ \"fc:aa:14:87:cc:a2\" ] : Optional Text"
+                    , " , comments = [] : List Text"
+                    , " }"
+                    ]
+
+chrome ∷ Host
+chrome = Host [hostname|chrome.sixears.co.uk.|]
+              [ip4|192.168.0.6|]
+              "study desktop server"
+              []
+              (Just [macAddress|fc:aa:14:87:cc:a2|])
+
+chromeTxtTest ∷ IO Host → TestTree
+chromeTxtTest =  ioTests "chromeTxt" [ ("chrome", \ h → Nothing ≟ chrome ≏ h) ]
+
 tests ∷ TestTree
 tests =
-  testGroup "Host"
-    [ testCase "hostname parse" $
-        assertRight (\ h → assertEqual (toString h) "foo.bar." (toText h))
-                    (parseHostname' ("foo.bar." ∷ Text))
-    , testCase "hostname qq" $ [hostname|foo.bar.|] ≟ __parseHostname' "foo.bar."
-    ]
+  testGroup "Host" [ withResource' (D.input auto chromeTxt) chromeTxtTest
+                   ]
+
+_test ∷ IO ()
+_test = defaultMain tests
+
+_tests ∷ String → IO ()
+_tests p = runTestsP_ tests p
 
 -- that's all, folks! ----------------------------------------------------------

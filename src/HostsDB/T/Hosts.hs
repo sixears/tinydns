@@ -9,16 +9,19 @@ where
 -- base --------------------------------
 
 import Data.Function  ( ($) )
-import Data.Maybe     ( Maybe( Nothing ) )
+import Data.Maybe     ( Maybe( Just ) )
+import Data.String    ( String )
 import System.IO      ( IO )
 
 -- base-unicode-symbols ----------------
 
 import Data.Function.Unicode  ( (∘) )
+import Data.Monoid.Unicode    ( (⊕) )
 
 -- dhall -------------------------------
 
 import qualified  Dhall  as  D
+
 import Dhall  ( auto )
 
 -- domainnames -------------------------
@@ -27,9 +30,11 @@ import DomainNames.Hostname  ( hostname, localname )
 
 -- fluffy ------------------------------
 
-import Fluffy.Functor2  ( (⊳) )
-import Fluffy.IP4       ( ip4 )
-import Fluffy.Tasty2    ( assertListEqIO, withResource' )
+import Fluffy.Functor2    ( (⊳) )
+import Fluffy.IP4         ( ip4 )
+import Fluffy.MACAddress  ( macAddress )
+import Fluffy.Tasty       ( runTestsP_ )
+import Fluffy.Tasty2      ( assertListEqIO, withResource' )
 
 -- mono-traversable --------------------
 
@@ -37,7 +42,7 @@ import Data.MonoTraversable  ( otoList )
 
 -- tasty -------------------------------
 
-import Test.Tasty  ( TestTree, testGroup )
+import Test.Tasty  ( TestTree, defaultMain, testGroup )
 
 -- text --------------------------------
 
@@ -52,27 +57,30 @@ import qualified  Data.HashMap.Strict  as  HashMap
 ------------------------------------------------------------
 
 import HostsDB.Host          ( Host( Host ) )
-import HostsDB.Hosts         ( Hosts( Hosts ), hosts )
-import HostsDB.HostMap       ( HostMap( HostMap ) )
-import HostsDB.LocalHostMap  ( LocalHostMap( LocalHostMap ) )
+import HostsDB.Hosts         ( Hosts( Hosts )
+                             , aliases, dns_servers, mail_servers, hosts )
+import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
+import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ) )
 
 --------------------------------------------------------------------------------
 
 hostsTestHosts ∷ Hosts
 hostsTestHosts =
   let chrome = Host [hostname|chrome.sixears.co.uk.|] [ip4|192.168.0.6|]
-                "study desktop server" [ "fc:aa:14:87:cc:a2" ] Nothing
+                    "study desktop server" []
+                    (Just [macAddress|fc:aa:14:87:cc:a2|])
       winxp  = Host [hostname|winxp.sixears.co.uk.|] [ip4|192.168.0.87|]
-                    "VirtualBox on Chrome" [ "08:00:27:23:08:43" ] Nothing
+                    "VirtualBox on Chrome" []
+                    (Just [macAddress|08:00:27:23:08:43|])
       cargo  = Host [hostname|cargo.sixears.co.uk.|] [ip4|192.168.0.9|]
-                    "DVR" [ "e0:cb:4e:ba:be:60" ] Nothing
-      expHostMap = HostMap $ HashMap.fromList [ ([localname|winxp|] , winxp)
-                                              , ([localname|chrome|], chrome)
-                                              , ([localname|cargo|] , cargo)
-                                              ]
+                    "DVR" [] (Just [macAddress|e0:cb:4e:ba:be:60|])
+      expHostMap = LHostMap $ HashMap.fromList [ ([localname|winxp|] , winxp)
+                                               , ([localname|chrome|], chrome)
+                                               , ([localname|cargo|] , cargo)
+                                               ]
    in Hosts expHostMap [ [localname|cargo|], [localname|chrome|] ]
                        [ [localname|cargo|] ]
-                       (LocalHostMap $ HashMap.fromList
+                       (LocalnameMap $ HashMap.fromList
                           [ ([localname|mailhost|], [localname|cargo|])
                           , ([localname|www|]     , [localname|chrome|])
                           , ([localname|cvs|]     , [localname|chrome|])
@@ -113,15 +121,30 @@ hostsTestText =
 
 dhallTests' ∷ IO Hosts → TestTree
 dhallTests' hs =
-  testGroup "dhallTests" $ assertListEqIO "hosts"
+  testGroup "dhallTests" $ assertListEqIO "aliases"
+                                              (otoList $ aliases hostsTestHosts)
+                                              (otoList ∘ aliases ⊳ hs)
+                         ⊕ assertListEqIO "dns_servers"
+                                              (dns_servers hostsTestHosts)
+                                              (dns_servers ⊳ hs)
+                         ⊕ assertListEqIO "mail_servers"
+                                              (mail_servers hostsTestHosts)
+                                              (mail_servers ⊳ hs)
+                         ⊕ assertListEqIO "hosts"
                                               (otoList $ hosts hostsTestHosts)
                                               (otoList ∘ hosts ⊳ hs)
 dhallTests ∷ TestTree
 dhallTests = withResource' (D.input auto hostsTestText) dhallTests'
 
+----------------------------------------
 
 tests ∷ TestTree
 tests = testGroup "Hosts" [ dhallTests ]
 
+_test ∷ IO ()
+_test = defaultMain tests
+
+_tests ∷ String → IO ()
+_tests p = runTestsP_ tests p
 
 -- that's all, folks! ----------------------------------------------------------

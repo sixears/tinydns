@@ -96,7 +96,7 @@ __ip4 = __parsecN
 
 {-| quasi-quoter for ipv4 addresses -}
 ip4 ∷ QuasiQuoter
-ip4 = mkQuasiQuoterExp "ip4" ( \ t → appE (varE '__ip4) (litE $ stringL t) )
+ip4 = mkQuasiQuoterExp "IP4" ( \ t → appE (varE '__ip4) (litE $ stringL t) )
 
 instance Interpret IP4 where
   autoWith _ = Type {..}

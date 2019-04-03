@@ -23,13 +23,22 @@ import Test.Tasty  ( TestTree, testGroup )
 --                     local imports                      --
 ------------------------------------------------------------
 
+import qualified  DomainNames.T.FQDN
+import qualified  DomainNames.T.Hostname
+import qualified  Fluffy.T.MACAddress
 import qualified  HostsDB.T.Host
+import qualified  HostsDB.T.Hosts
 
 --------------------------------------------------------------------------------
 
 tests ∷ TestTree
 
-tests = testGroup "tinydns" [ HostsDB.T.Host.tests ]
+tests = testGroup "tinydns" [ DomainNames.T.FQDN.tests
+                            , DomainNames.T.Hostname.tests
+                            , Fluffy.T.MACAddress.tests
+                            , HostsDB.T.Host.tests
+                            , HostsDB.T.Hosts.tests
+                            ]
 
 main ∷ IO ()
 main = do

@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wall #-}
+
 {-# LANGUAGE DeriveAnyClass      #-}
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleContexts    #-}
@@ -15,34 +17,23 @@
 
 import Prelude ( error )
 
--- aeson -------------------------------
-
-import Data.Aeson.Types  ( Value( Object ), typeMismatch )
-
 -- base --------------------------------
 
-import Control.Monad        ( fail, forM_, forM, mapM, mapM_, return )
-import Data.Bool            ( Bool( False, True ), not )
+import Control.Monad        ( forM_, forM, mapM, mapM_, return )
 import Data.Bifunctor       ( first )
 import Data.Either          ( Either( Left, Right ), either, partitionEithers )
-import Data.Eq              ( Eq )
-import Data.Function        ( ($), (&), const, flip, id )
+import Data.Function        ( ($), (&), id )
 import Data.Functor         ( fmap )
-import Data.IORef           ( IORef, readIORef, writeIORef )
-import Data.List            ( intercalate, sortOn )
-import Data.Maybe           ( Maybe( Just, Nothing ), maybe )
-import Data.Monoid          ( Monoid )
+import Data.List            ( sortOn )
+import Data.Maybe           ( Maybe( Just, Nothing ) )
 import Data.String          ( String )
-import Data.Tuple           ( uncurry )
-import GHC.Generics         ( Generic )
 import System.Exit          ( ExitCode( ExitFailure ) )
 import System.IO            ( FilePath, Handle, IO, putStrLn )
-import Text.Show            ( Show, show )
+import Text.Show            ( show )
 
 -- base-unicode-symbols ----------------
 
 import Data.Function.Unicode  ( (∘) )
-import Data.Monoid.Unicode    ( (∅), (⊕) )
 
 -- bytestring --------------------------
 
@@ -56,34 +47,24 @@ import Data.Textual  ( Printable( print ), toString, toText )
 
 import qualified  Dhall       as  D
 
-import Dhall  ( Interpret( autoWith ), Type
-              , auto, field, record )
+import Dhall  ( auto )
 
 -- domainnames -------------------------
 
-import qualified  DomainNames.T.FQDN
-
 import DomainNames.Error.DomainError     ( AsDomainError( _DomainError )
                                          , DomainError )
-import DomainNames.Error.LocalnameError  ( LocalnameError )
 import DomainNames.FQDN                  ( FQDN, fqdn )
-import DomainNames.Hostname              ( Hostname, Localname, (<..>)
-                                         , hostlocal, hostname, localname
-                                         , parseLocalname'
-                                         )
+import DomainNames.Hostname              ( Hostname, Localname, (<..>) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Applicative    ( (⊵) )
-import Fluffy.Either         ( __right, leftFail )
-import Fluffy.Foldable2      ( HasLength( length ) )
+import Fluffy.Either         ( __right )
 import Fluffy.Functor2       ( (⊳) )
 import Fluffy.Lens2          ( (⊣), (⊢) )
 import Fluffy.IO.Error2      ( )
-import Fluffy.IP4            ( IP4, ip4 )
-import Fluffy.Map            ( __fromList, fromList )
+import Fluffy.IP4            ( IP4 )
 import Fluffy.Maybe          ( maybeE )
-import Fluffy.Monad          ( (≫), returnPair )
+import Fluffy.Monad          ( (≫) )
 import Fluffy.MonadError     ( splitMError )
 import Fluffy.MonadIO        ( MonadIO, liftIO )
 import Fluffy.MonadIO2       ( die, dieUsage )
@@ -91,29 +72,20 @@ import Fluffy.Options        ( optParser )
 import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseFile' )
 import Fluffy.Path2          ( )
-import Fluffy.Tasty          ( runTestsP_ )
-import Fluffy.Tasty2         ( assertListEqIO )
 import Fluffy.TempFile2      ( pc, with2TempFiles' )
-import Fluffy.Text2          ( parenthesize )
 
 -- hostsdb -----------------------------
 
-import qualified  HostsDB.T.Host
-
-import HostsDB.Host  ( Host( Host ), hname, hostType, ipv4 )
+import HostsDB.Host          ( Host, hname, ipv4 )
+import HostsDB.Hosts         ( Hosts, aliases, dns_servers, hostsHosts
+                             , hostIPv4', lookupHost, mail_servers )
+import HostsDB.LocalnameMap  ( unLHMap )
 
 -- lens --------------------------------
 
 import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
 import Control.Lens.Prism   ( Prism', prism' )
-
--- mono-traversable --------------------
-
-import Data.MonoTraversable  ( Element
-                             , MonoFoldable( ofoldl', ofoldl1Ex', ofoldMap
-                                           , ofoldr, ofoldr1Ex, otoList )
-                             )
 
 -- mtl ---------------------------------
 
@@ -124,9 +96,6 @@ import Control.Monad.Except  ( MonadError )
 import qualified  Options.Applicative.Types  as  OptParse
 
 import Options.Applicative.Builder  ( ReadM, argument, eitherReader, help )
-
--- parsec ------------------------------
-
 
 -- path --------------------------------
 
@@ -141,19 +110,11 @@ import ProcLib.Process                ( mkProc_, runProcIO )
 import ProcLib.Types.CmdSpec          ( CmdSpec( CmdSpec ) )
 import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 
--- tasty -------------------------------
-
-import Test.Tasty  ( TestTree, defaultMain, testGroup, withResource )
-
--- tasty-hunit -------------------------
-
-import Test.Tasty.HUnit  ( assertFailure )
-
 -- text --------------------------------
 
 import qualified  Data.Text.IO
 
-import Data.Text     ( Text, concat, pack, unlines, unpack )
+import Data.Text     ( Text, pack, unlines )
 
 -- text-printer ------------------------
 
@@ -166,13 +127,11 @@ import Text.Fmt  ( fmtT )
 -- unordered-containers ----------------
 
 import qualified  Data.HashMap.Strict  as  HashMap
-import Data.HashMap.Strict  ( HashMap, elems, lookup )
+import Data.HashMap.Strict  ( HashMap )
 
 -- yaml --------------------------------
 
-import qualified  Data.Yaml  as  Yaml
-import Data.Yaml  ( FromJSON( parseJSON ), Value( String )
-                  , decodeEither' )
+import Data.Yaml  ( decodeEither' )
 
 ------------------------------------------------------------
 --                     local imports                      --
@@ -182,150 +141,7 @@ import qualified  TinyDNS.Paths  as  Paths
 
 --------------------------------------------------------------------------------
 
-newtype HostMap = HostMap { unHostMap ∷ HashMap Localname Host }
-  deriving (Eq, Show)
-
-instance HasLength HostMap where
-  length = length ∘ unHostMap
-
-data LocalHostRelation = LocalHostRelation { lname ∷ Localname, lhost ∷ Host }
-  deriving Eq
-
-instance Printable LocalHostRelation where
-  print lh = P.text ∘ parenthesize $ concat [ toText $ lname lh
-                                            , " → "
-                                            , toText $ lhost lh
-                                            ]
-
-type instance Element HostMap = LocalHostRelation
-instance MonoFoldable HostMap where
-  ofoldMap ∷ Monoid ξ ⇒ (LocalHostRelation → ξ) → HostMap → ξ
-  ofoldMap f hm =
-    HashMap.foldlWithKey' (\ a k v → a ⊕ f (LocalHostRelation k v)) ∅ hm
-
-  ofoldr ∷ (LocalHostRelation → α → α) → α → HostMap → α
-  ofoldr f init (HostMap hm) =
-    HashMap.foldrWithKey (\ k v a → f (LocalHostRelation k v) a) init hm
-
-  ofoldl' ∷ (α → LocalHostRelation → α) → α → HostMap → α
-  ofoldl' f init (HostMap hm) =
-    HashMap.foldlWithKey' (\ a k v → f a (LocalHostRelation k v)) init hm
-
-  ofoldr1Ex ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
-            → HostMap → LocalHostRelation
-  ofoldr1Ex f (HostMap hm) =
-    ofoldr1Ex f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
-
-  ofoldl1Ex' ∷ (LocalHostRelation → LocalHostRelation → LocalHostRelation)
-             → HostMap → LocalHostRelation
-  ofoldl1Ex' f (HostMap hm) =
-    ofoldl1Ex' f (uncurry LocalHostRelation ⊳ HashMap.toList hm)
-
-
-instance FromJSON HostMap where
-  parseJSON (Object hm) =
-    let go ∷ (Text,Value) → Yaml.Parser (Localname, Host)
-        go (k,v@(Object _)) = returnPair (leftFail $ parseLocalname' k, parseJSON v)
-        go (k,invalid)  =
-          typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
-          Left  dups → fail $ toString dups
-          Right hm'  → return $ HostMap hm'
-  parseJSON invalid = typeMismatch "host map" invalid
-
-hmHosts ∷ HostMap → [Host]
-hmHosts (HostMap hm) = elems hm
-
-hostMapType ∷ Type HostMap
-hostMapType = let localHNKey h = (hostlocal (hname h), h)
-               in HostMap ∘ __fromList ∘ fmap localHNKey ⊳ D.list hostType
-
-instance Interpret HostMap where
-  autoWith _ = hostMapType
-
 ------------------------------------------------------------
-
-newtype LocalHostMap = LocalHostMap { unSHMap ∷ HashMap Localname Localname }
-  deriving (Eq, Show)
-
-data LocalAlias = LocalAlias Localname Localname
-
-localAliasType ∷ Type LocalAlias
-localAliasType = record $ LocalAlias ⊳ field "from" auto
-                                     ⊵ field "to"   auto
-
-instance Interpret LocalAlias where
-  autoWith _ = localAliasType
-
-localAliasPair ∷ LocalAlias → (Localname,Localname)
-localAliasPair (LocalAlias aliasFrom aliasTo) = (aliasFrom,aliasTo)
-
-shortHostMapType ∷ Type LocalHostMap
-shortHostMapType =
-  LocalHostMap ⊳ __fromList ∘ fmap localAliasPair ⊳ D.list localAliasType
-
-instance Interpret LocalHostMap where
-  autoWith _ = shortHostMapType
-
-instance FromJSON LocalHostMap where
-  parseJSON (Object hm) =
-    let go' ∷ MonadError LocalnameError η ⇒ (Text,Text) → η (Localname,Localname)
-        go' (k, v) = do k' ← parseLocalname' k
-                        v' ← parseLocalname' v
-                        return (k',v')
-        go ∷ (Text,Value) → Yaml.Parser (Localname, Localname)
-        go (k,String v) = either (fail ∘ toString) return $ go' (k,v)
---          return (UQDN k, UQDN v)
-        go (k,invalid)  =
-          typeMismatch (unpack $ "short host name: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
-          Left dups → fail $ toString dups
-          Right hm' → return $ LocalHostMap hm'
-  parseJSON invalid     = typeMismatch "short host map" invalid
-
-------------------------------------------------------------
-
-data Hosts = Hosts { hosts        ∷ HostMap
-                   , dns_servers  ∷ [Localname]
-                   , mail_servers ∷ [Localname]
-                   , aliases      ∷ LocalHostMap
-                   }
-  deriving (Eq, FromJSON, Generic)
-
-
-hostsType ∷ Type Hosts
-hostsType = record $ Hosts ⊳ field "hosts"        hostMapType
-                           ⊵ field "dns_servers"  (D.list auto)
-                           ⊵ field "mail_servers" (D.list auto)
-                           ⊵ field "aliases"      shortHostMapType
-
-instance Interpret Hosts where
-  autoWith _ = hostsType
-
-
-instance Show Hosts where
-  show h = intercalate "\n" [ "HOSTS:        " ⊕ show (hosts h)
-                            , "DNS_SERVERS:  " ⊕ show (dns_servers h)
-                            , "MAIL_SERVERS: " ⊕ show (mail_servers h)
-                            , "ALIASES:      " ⊕ show (aliases h)
-                            ]
-
-lookupHost ∷ Hosts → Localname → Maybe Host
-lookupHost = flip lookup ∘ unHostMap ∘ hosts
-
-hostIPv4 ∷ Hosts → Localname → Maybe IP4
-hostIPv4 hs h = ipv4 ⊳ lookupHost hs h
-
-hostIPv4' ∷ Hosts → Localname → Either Text IP4
-hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
-                     noSuchH = "hostIPv4': no such host " ⊕ quote h
-                 in maybe (Left noSuchH) Right $ hostIPv4 hs h
-
-hostsHosts ∷ Hosts → [Host]
-hostsHosts = hmHosts ∘ hosts
-
-hostIPv4s ∷ Hosts → [(Hostname,IP4)]
-hostIPv4s = fmap ( \ h → (hname h, ipv4 h) ) ∘ hostsHosts
 
 ------------------------------------------------------------
 
@@ -361,14 +177,14 @@ __loadFileYaml__ fn = liftIO $
 
 __loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
 __loadFileDhall__ fn = liftIO $
-  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) hostsType
+  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) auto
 
 domains ∷ [Text]
 domains = ["sixears.co.uk", "0.168.192.in-addr.arpa"];
 
 -- XXX
 myDomain ∷ FQDN
-myDomain = [fqdn|sixears.co.uk|]
+myDomain = [fqdn|sixears.com.uk.|]
 
 ----------------------------------------
 
@@ -392,138 +208,8 @@ addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add
 
 ----------------------------------------
 
-_test ∷ IO ()
-_test = defaultMain tests
-
-_tests ∷ String → IO ()
-_tests p = runTestsP_ tests p
-
-{- | like `withResource`, but with a no-op release resource -}
-withResource' ∷ IO α → (IO α → TestTree) → TestTree
-withResource' = flip withResource (const $ return ())
-
-tests ∷ TestTree
-tests = testGroup "mktinydnsdata" [ DomainNames.T.FQDN.tests
-                                  , HostsDB.T.Host.tests
-                                  , withResource' (D.input hostsType hostsTestText)
-                                                  hostsDhallTests'
-                                  ]
-
-domainNamesTests ∷ TestTree
-domainNamesTests = testGroup "DomainNames tests" [ DomainNames.T.FQDN.tests
-                                                 , HostsDB.T.Host.tests ]
-
-hostsTestHosts ∷ Hosts
-hostsTestHosts =
-  let chrome = Host [hostname|chrome.sixears.co.uk.|] [ip4|192.168.0.6|]
-                "study desktop server" [ "fc:aa:14:87:cc:a2" ] Nothing
-      winxp  = Host [hostname|winxp.sixears.co.uk.|] [ip4|192.168.0.87|]
-                    "VirtualBox on Chrome" [ "08:00:27:23:08:43" ] Nothing
-      cargo  = Host [hostname|cargo.sixears.co.uk.|] [ip4|192.168.0.9|]
-                    "DVR" [ "e0:cb:4e:ba:be:60" ] Nothing
-      expHostMap = HostMap $ HashMap.fromList [ ([localname|winxp|] , winxp)
-                                              , ([localname|chrome|], chrome)
-                                              , ([localname|cargo|] , cargo)
-                                              ]
-   in Hosts expHostMap [ [localname|cargo|], [localname|chrome|] ]
-                       [ [localname|cargo|] ]
-                       (LocalHostMap $ HashMap.fromList
-                          [ ([localname|mailhost|], [localname|cargo|])
-                          , ([localname|www|]     , [localname|chrome|])
-                          , ([localname|cvs|]     , [localname|chrome|])
-                          ]
-                       )
-
-hostsDhallTests' ∷ IO Hosts → TestTree
-hostsDhallTests' hs =
-  testGroup "hostsDhallTests" $ assertListEqIO "hosts"
-                                              (otoList $ hosts hostsTestHosts)
-                                              (otoList ∘ hosts ⊳ hs)
-  
-hostsTestText ∷ Text
-hostsTestText =
-  unlines [ "{ aliases = [ { from = \"mailhost\", to = \"cargo\"}"
-          , "            , { from = \"www\",      to = \"chrome\"}"
-          , "            , { from = \"cvs\",      to = \"chrome\"}"
-          , "            ]"
-          , ", dns_servers = [ \"cargo\", \"chrome\" ]"
-          , ", mail_servers = [ \"cargo\" ]"
-          , ""
-          , ", hosts = [ { fqdn = \"chrome.sixears.co.uk.\""
-          , "            , ipv4 = \"192.168.0.6\""
-          , "            , desc = \"study desktop server\""
-          , "            , mac= [ \"fc:aa:14:87:cc:a2\" ] : Optional Text"
-          , "            , comments = [] : List Text"
-          , "            }"
-          , "          , { fqdn = \"winxp.sixears.co.uk.\""
-          , "            , ipv4 = \"192.168.0.87\""
-          , "            , desc = \"VirtualBox on Chrome\""
-          , "            , mac= [ \"08:00:27:23:08:43\" ] : Optional Text"
-          , "            , comments = [] : List Text"
-          , "            }"
-          , ""
-          , "          , { fqdn = \"cargo.sixears.co.uk.\""
-          , "            , ipv4 = \"192.168.0.9\""
-          , "            , desc = \"DVR\""
-          , "            , mac  = [ \"e0:cb:4e:ba:be:60\" ] : Optional Text"
-          , "            , comments = [] : List Text"
-          , "            }"
-          , "          ]"
-          , "}"
-          ]
-
-initIORef :: IORef Bool -> IO (IORef Bool)
-initIORef ref = do
-  v <- readIORef ref
-  if v
-    then assertFailure "resource was already initialized!"
-    else writeIORef ref True
-  return ref
-
-releaseIORef :: IORef Bool -> IO ()
-releaseIORef ref = do
-  v <- readIORef ref
-  if not v
-    then assertFailure "resource was not initialized!"
-  else writeIORef ref False
-
-----------------------------------------
-
 main ∷ IO ()
 main = do
-  let testText =
-        unlines [ "{ aliases = [ { from = \"mailhost\", to = \"cargo\"}"
-                , "            , { from = \"www\",      to = \"chrome\"}"
-                , "            , { from = \"cvs\",      to = \"chrome\"}"
-                , "            ]"
-                , ", dns_servers = [ \"cargo\", \"chrome\" ]"
-                , ", mail_servers = [ \"cargo\" ]"
-                , ""
-                , ", hosts = [ { fqdn = \"chrome.sixears.co.uk.\""
-                , "            , ipv4 = \"192.168.0.6\""
-                , "            , desc = \"study desktop server\""
-                , "            , mac= [ \"fc:aa:14:87:cc:a2\" ] : Optional Text"
-                , "            , comments = [] : List Text"
-                , "            }"
-                , "          , { fqdn = \"winxp.sixears.co.uk.\""
-                , "            , ipv4 = \"192.168.0.87\""
-                , "            , desc = \"VirtualBox on Chrome\""
-                , "            , mac= [ \"08:00:27:23:08:43\" ] : Optional Text"
-                , "            , comments = [] : List Text"
-                , "            }"
-                , ""
-                , "          , { fqdn = \"cargo.sixears.co.uk.\""
-                , "            , ipv4 = \"192.168.0.9\""
-                , "            , desc = \"DVR\""
-                , "            , mac  = [ \"e0:cb:4e:ba:be:60\" ] : Optional Text"
-                , "            , comments = [] : List Text"
-                , "            }"
-                , "          ]"
-                , "}"
-                ]
-
-  D.input hostsType testText ≫ putStrLn ∘ show
-
   cwd  ← getCwd_
   opts ← optParser "make tiny dns data from hosts config" (parseOptions cwd)
   let infn = opts ⊣ input
@@ -601,7 +287,7 @@ __mkData__ hs (fn1,_) (fn2,_) = do
 
   forM_ (addHostCmd fn1 fn2 ⊳ (sortOn ipv4 $ hostsHosts hs)) (mapM_ runProc')
 
-  case forM (unSHMap $ aliases hs) ( \ h → maybeE h (lookupHost hs h) ) of
+  case forM (unLHMap $ aliases hs) ( \ h → maybeE h (lookupHost hs h) ) of
     Left  h  → die (ExitFailure 3) h
     Right as → addAliasCmds'' fn1 fn2 myDomain as
 
@@ -611,50 +297,6 @@ __mkData__ hs (fn1,_) (fn2,_) = do
 
 
   Data.Text.IO.readFile (toString fn1) ≫ Data.Text.IO.putStrLn
-
-  let dhall = "{ fqdn = \"fqdn\", desc = \"descn\", ipv4 = \"192.168.0.10\""
-            ⊕ ", mac = [] : Optional Text, comments = [] : List Text }"
-  D.input hostType dhall ≫ putStrLn ∘ show
-
-  -- this requires 'Interpret' instance of Host
-  (D.input auto dhall ∷ IO Host) ≫ putStrLn ∘ show
-
-  let dhall2 = unlines [ "let HostsType = List { fqdn : Text"
-                       , "                     , desc : Text"
-                       , "                     , ipv4 : Text"
-                       , "                     , comments : List Text"
-                       , "                     , mac : Optional Text"
-                       , "                     }"
-                       , " in [ { fqdn = \"fqdn\""
-                       , "      , desc = \"descn\""
-                       , "      , ipv4 = \"192.168.0.10\""
-                       , "      , comments = [] : List Text"
-                       , "      , mac = [] : Optional Text"
-                       , "      } ]"
-                       , "    : HostsType"
-                       ]
-  D.input hostMapType dhall2 ≫ putStrLn ∘ show
-
-  let dhall3 = unlines [ "let HostsType = List { fqdn     : Text"
-                       , "                     , desc     : Text"
-                       , "                     , ipv4     : Text"
-                       , "                     , comments : List Text"
-                       , "                     , mac      : Optional Text"
-                       , "                     }"
-                       , " in { hosts = [ { fqdn = \"fqdn\""
-                       , "                , desc = \"descn\""
-                       , "                , ipv4 = \"192.168.0.10\""
-                       , "                , comments = [] : List Text"
-                       , "                , mac = [] : Optional Text"
-                       , "                }"
-                       , "              ]"
-                       , "    , aliases = [ { from = \"mailhost\", to = \"cargo\"} ] "
-                       , "    , dns_servers = [ \"cargo\", \"chrome\" ]"
-                       , "    , mail_servers = [ \"cargo\" ]"
-                       , "    }"
---                       , "    : HostsType"
-                       ]
-  D.input hostsType dhall3 ≫ putStrLn ∘ show
 
 ----------------------------------------
 
