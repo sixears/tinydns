@@ -33,8 +33,7 @@ import Data.Monoid.Unicode    ( (⊕) )
 
 -- dhall -------------------------------
 
-import Dhall  ( Interpret( autoWith ), Type
-              , auto, field, list, record, strictText )
+import Dhall  ( Interpret( autoWith ), Type, auto, field, record, strictText )
 
 -- data-textual ------------------------
 

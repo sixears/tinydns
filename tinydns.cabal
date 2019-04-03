@@ -58,6 +58,7 @@ library
     
                     , DomainNames.Constants
                     , DomainNames.Domain
+                    , DomainNames.Error.ExecCreateDomainError
                     , DomainNames.Error.DomainError
                     , DomainNames.Error.DomainLabelError
                     , DomainNames.Error.FQDNError
@@ -90,8 +91,8 @@ library
   -- Other library packages from which modules are imported.
   build-depends:       aeson, base, base-unicode-symbols, data-textual, dhall
                      , hashable, lens, mono-traversable, mtl, network-ip, parsec
-                     , parsers, path, QuickCheck, safe, scientific, tasty
-                     , tasty-hunit, tasty-quickcheck, template-haskell
+                     , parsers, path, proclib, QuickCheck, safe, scientific
+                     , tasty, tasty-hunit, tasty-quickcheck, template-haskell
                      , temporary, text, text-printer, Unique
                      , unordered-containers, yaml
 
@@ -114,7 +115,7 @@ executable mktinydnsdata
   hs-source-dirs:      bin
   build-depends:       base, base-unicode-symbols, bytestring, data-textual
                      , dhall, lens, mtl, optparse-applicative, path, split
-                     , text, text-printer, unordered-containers, yaml
+                     , text, unordered-containers, yaml
 
                      , fluffy >= 0.2.6.0, proclib >= 3.1.1.0, tfmt
                      , tinydns

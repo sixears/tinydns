@@ -1,19 +1,10 @@
 {-# OPTIONS_GHC -Wall #-}
 
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE InstanceSigs        #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE QuasiQuotes         #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE UnicodeSyntax       #-}
-{-# LANGUAGE ViewPatterns        #-}
 
 import Prelude ( error )
 
@@ -25,7 +16,7 @@ import Data.Either          ( Either( Left, Right ), either, partitionEithers )
 import Data.Function        ( ($), (&), id )
 import Data.Functor         ( fmap )
 import Data.List            ( sortOn )
-import Data.Maybe           ( Maybe( Just, Nothing ) )
+import Data.Maybe           ( Maybe( Just ) )
 import Data.String          ( String )
 import System.Exit          ( ExitCode( ExitFailure ) )
 import System.IO            ( FilePath, Handle, IO, putStrLn )
@@ -41,7 +32,7 @@ import Data.ByteString  ( readFile )
 
 -- data-textual ------------------------
 
-import Data.Textual  ( Printable( print ), toString, toText )
+import Data.Textual  ( toString, toText )
 
 -- dhall -------------------------------
 
@@ -51,8 +42,8 @@ import Dhall  ( auto )
 
 -- domainnames -------------------------
 
-import DomainNames.Error.DomainError     ( AsDomainError( _DomainError )
-                                         , DomainError )
+import DomainNames.Error.DomainError     ( AsDomainError )
+import DomainNames.Error.ExecCreateDomainError ( ExecCreateDomainError )
 import DomainNames.FQDN                  ( FQDN, fqdn )
 import DomainNames.Hostname              ( Hostname, Localname, (<..>) )
 
@@ -85,7 +76,6 @@ import HostsDB.LocalnameMap  ( unLHMap )
 
 import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
-import Control.Lens.Prism   ( Prism', prism' )
 
 -- mtl ---------------------------------
 
@@ -103,9 +93,9 @@ import Path  ( File, Path, (</>), toFilePath )
 
 -- proclib -----------------------------
 
-import ProcLib.Error.CreateProcError  ( AsCreateProcError( _CreateProcError ) )
-import ProcLib.Error.ExecError        ( AsExecError( _ExecError ) )
-import ProcLib.Error.ExecCreateError  ( ExecCreateError( ECExecE, ECCreateE ) )
+import ProcLib.Error.CreateProcError  ( AsCreateProcError )
+import ProcLib.Error.ExecError        ( AsExecError )
+import ProcLib.Error.ExecCreateError  ( ExecCreateError )
 import ProcLib.Process                ( mkProc_, runProcIO )
 import ProcLib.Types.CmdSpec          ( CmdSpec( CmdSpec ) )
 import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
@@ -115,10 +105,6 @@ import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 import qualified  Data.Text.IO
 
 import Data.Text     ( Text, pack, unlines )
-
--- text-printer ------------------------
-
-import qualified  Text.Printer  as  P
 
 -- tfmt --------------------------------
 
@@ -199,7 +185,7 @@ addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, 
 ----------------------------------------
 
 addAliasCmd ∷ AbsFile → AbsFile → Host → Hostname → CmdSpec
-addAliasCmd fn tmpfn h hname = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText hname, toText $ ipv4 h ]
+addAliasCmd fn tmpfn h name = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText name, toText $ ipv4 h ]
 
 ----------------------------------------
 
@@ -240,30 +226,6 @@ addAliasCmds ∷ (MonadIO μ, AsExecError ε, AsCreateProcError ε, AsDomainErro
 addAliasCmds fn1 fn2 d as =
   let go (a,h) = a <..> d ≫ return ∘ addAliasCmd fn1 fn2 h
   in mapM go (HashMap.toList as) ≫ mapM_ runProc
-
-data ExecCreateDomainError = ECDExecCreateE ExecCreateError
-                           | ECDDomainE     DomainError
-
-instance Printable ExecCreateDomainError where
-  print (ECDExecCreateE e) = P.string (show e)
-  print (ECDDomainE e)     = print e
-
-_ECDExecCreateE ∷ Prism' ExecCreateDomainError ExecCreateError
-_ECDExecCreateE = prism' ECDExecCreateE (\ case (ECDExecCreateE e) → Just e; _ → Nothing)
-
-
-instance AsExecError ExecCreateDomainError where
-  _ExecError = prism' (ECDExecCreateE ∘ ECExecE)
-                      (\ case (ECDExecCreateE (ECExecE e)) → Just e
-                              _                              → Nothing)
-instance AsCreateProcError ExecCreateDomainError where
-  _CreateProcError = prism' (ECDExecCreateE ∘ ECCreateE)
-                            (\ case (ECDExecCreateE (ECCreateE e)) → Just e
-                                    _                                → Nothing)
-
-instance AsDomainError ExecCreateDomainError where
-  _DomainError = prism' ECDDomainE
-                        (\ case (ECDDomainE e) → Just e; _ → Nothing)
 
 addAliasCmds' ∷ (MonadIO μ, MonadError ExecCreateDomainError μ) ⇒
                 AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
