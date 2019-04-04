@@ -39,6 +39,7 @@ import Dhall  ( Interpret( autoWith ), Type, auto, field, record )
 
 -- domainnames -------------------------
 
+import DomainNames.FQDN      ( FQDN )
 import DomainNames.Hostname  ( Hostname, Localname )
 
 -- fluffy ------------------------------
@@ -65,16 +66,17 @@ import HostsDB.LocalnameMap  ( LocalnameMap )
 
 --------------------------------------------------------------------------------
 
-data Hosts = Hosts { hosts        ∷ LHostMap
+data Hosts = Hosts { domain       ∷ FQDN
+                   , hosts        ∷ LHostMap
                    , dns_servers  ∷ [Localname]
                    , mail_servers ∷ [Localname]
                    , aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
 
-
 hostsType ∷ Type Hosts
-hostsType = record $ Hosts ⊳ field "hosts"        auto
+hostsType = record $ Hosts ⊳ field "domain"       auto
+                           ⊵ field "hosts"        auto
                            ⊵ field "dns_servers"  (D.list auto)
                            ⊵ field "mail_servers" (D.list auto)
                            ⊵ field "aliases"      auto

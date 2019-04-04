@@ -26,6 +26,7 @@ import Dhall  ( auto )
 
 -- domainnames -------------------------
 
+import DomainNames.FQDN      ( fqdn )
 import DomainNames.Hostname  ( hostname, localname )
 
 -- fluffy ------------------------------
@@ -78,18 +79,21 @@ hostsTestHosts =
                                                , ([localname|chrome|], chrome)
                                                , ([localname|cargo|] , cargo)
                                                ]
-   in Hosts expHostMap [ [localname|cargo|], [localname|chrome|] ]
-                       [ [localname|cargo|] ]
-                       (LocalnameMap $ HashMap.fromList
-                          [ ([localname|mailhost|], [localname|cargo|])
-                          , ([localname|www|]     , [localname|chrome|])
-                          , ([localname|cvs|]     , [localname|chrome|])
-                          ]
-                       )
+   in Hosts [fqdn|sixears.co.uk|]
+            expHostMap 
+            [ [localname|cargo|], [localname|chrome|] ]
+            [ [localname|cargo|] ]
+            (LocalnameMap $ HashMap.fromList
+               [ ([localname|mailhost|], [localname|cargo|])
+               , ([localname|www|]     , [localname|chrome|])
+               , ([localname|cvs|]     , [localname|chrome|])
+               ]
+            )
   
 hostsTestText ∷ Text
 hostsTestText =
-  unlines [ "{ aliases = [ { from = \"mailhost\", to = \"cargo\"}"
+  unlines [ "{ domain  = \"sixears.co.uk.\""
+          , ", aliases = [ { from = \"mailhost\", to = \"cargo\"}"
           , "            , { from = \"www\",      to = \"chrome\"}"
           , "            , { from = \"cvs\",      to = \"chrome\"}"
           , "            ]"
