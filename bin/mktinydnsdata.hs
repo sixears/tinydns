@@ -19,7 +19,7 @@ import Data.List            ( sortOn )
 import Data.Maybe           ( Maybe( Just ) )
 import Data.String          ( String )
 import System.Exit          ( ExitCode( ExitFailure ) )
-import System.IO            ( FilePath, Handle, IO, putStrLn )
+import System.IO            ( Handle, IO, putStrLn )
 import Text.Show            ( show )
 
 -- base-unicode-symbols ----------------
@@ -74,7 +74,6 @@ import HostsDB.LocalnameMap  ( unLHMap )
 
 -- lens --------------------------------
 
-import Control.Lens.Getter  ( Getter, to )
 import Control.Lens.Lens    ( Lens', lens )
 
 -- mtl ---------------------------------
@@ -135,9 +134,6 @@ data Options = Options { _input ∷ AbsFile }
 
 input ∷ Lens' Options AbsFile
 input = lens _input ( \ o i → o { _input = i } )
-
-inputFilePath ∷ Getter Options FilePath
-inputFilePath = input ∘ to (toFilePath)
 
 ------------------------------------------------------------
 
