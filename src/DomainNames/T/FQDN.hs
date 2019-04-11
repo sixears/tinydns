@@ -13,9 +13,9 @@ import Data.Function  ( ($) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Functor2  ( (⊳) )
-import Fluffy.List      ( (⋮) )
-import Fluffy.Tasty2    ( (≟) )
+import Fluffy.Functor  ( (⊳) )
+import Fluffy.List     ( (⋮) )
+import Fluffy.Tasty    ( (≟) )
 
 -- tasty -------------------------------
 

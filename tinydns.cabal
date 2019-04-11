@@ -7,7 +7,7 @@ name:                tinydns
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.0.0.1
+version:             0.1.0.0
 
 -- A short (one-line) description of the package.
 synopsis:            yaml hosts database tool
@@ -46,17 +46,7 @@ cabal-version:        >=1.10
 library
   ghc-options:        -W -Wall -fhelpful-errors
   -- Modules exported by the library.
-  exposed-modules:    Fluffy.Applicative, Fluffy.Either, Fluffy.Equalish
-                    , Fluffy.Foldable2, Fluffy.Functor2, Fluffy.Indexable
-                    , Fluffy.IO.Error2, Fluffy.IP4, Fluffy.Lens2, Fluffy.List
-                    , Fluffy.MACAddress, Fluffy.T.MACAddress, Fluffy.Map
-                    , Fluffy.Monad, Fluffy.MonadIO2, Fluffy.Natural
-                    , Fluffy.Parsec2, Fluffy.Parsec.Error2, Fluffy.Path2
-                    , Fluffy.Printable, Fluffy.Quasi, Fluffy.Tasty2
-                    , Fluffy.TempFile2, Fluffy.Text2, Fluffy.Textual
-                    , Fluffy.ToNatural
-    
-                    , DomainNames.Constants
+  exposed-modules:    DomainNames.Constants
                     , DomainNames.Domain
                     , DomainNames.Error.ExecCreateDomainError
                     , DomainNames.Error.DomainError
@@ -89,20 +79,18 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       aeson, base, base-unicode-symbols, data-textual, dhall
-                     , hashable, lens, mono-traversable, mtl, network-ip, parsec
-                     , parsers, path, proclib, QuickCheck, safe, scientific
-                     , tasty, tasty-hunit, tasty-quickcheck, template-haskell
-                     , temporary, text, text-printer, Unique
-                     , unordered-containers, yaml
+  build-depends:      aeson, base, base-unicode-symbols, data-textual, dhall
+                    , hashable, lens, mono-traversable, mtl, path, tasty
+                    , tasty-hunit, template-haskell, text, text-printer
+                    , unordered-containers, yaml
 
-                     , fluffy >= 0.2.6.0, tfmt
+                    , fluffy >= 0.2.8.0, proclib >= 3.1.1.1, tfmt
 
   -- Directories containing source files.
-  hs-source-dirs:      src
+  hs-source-dirs:     src
 
   -- Base language which the package is written in.
-  default-language:    Haskell2010
+  default-language:   Haskell2010
 
 -------------------------------------------------------------------------------
 
@@ -117,7 +105,7 @@ executable mktinydnsdata
                      , dhall, lens, mtl, optparse-applicative, path, split
                      , text, unordered-containers, yaml
 
-                     , fluffy >= 0.2.6.0, proclib >= 3.1.1.0, tfmt
+                     , fluffy >= 0.2.8.0, proclib >= 3.1.1.0, tfmt
                      , tinydns
   default-extensions:  NoImplicitPrelude
   default-language:    Haskell2010

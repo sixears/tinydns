@@ -42,9 +42,9 @@ import Dhall  ( Interpret( autoWith ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Either    ( __right )
-import Fluffy.Functor2  ( (⊳) )
-import Fluffy.Quasi     ( mkQuasiQuoterExp )
+import Fluffy.Either   ( __right )
+import Fluffy.Functor  ( (⊳) )
+import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 -- hashable ----------------------------
 

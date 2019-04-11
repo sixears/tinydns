@@ -49,21 +49,18 @@ import DomainNames.Hostname              ( Hostname, Localname, (<..>) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Either         ( __right )
-import Fluffy.Functor2       ( (⊳) )
-import Fluffy.Lens2          ( (⊣), (⊢) )
-import Fluffy.IO.Error2      ( )
-import Fluffy.IP4            ( IP4 )
-import Fluffy.Maybe          ( maybeE )
-import Fluffy.Monad          ( (≫) )
-import Fluffy.MonadError     ( splitMError )
-import Fluffy.MonadIO        ( MonadIO, liftIO )
-import Fluffy.MonadIO2       ( die, dieUsage )
-import Fluffy.Options        ( optParser )
-import Fluffy.Path           ( AbsDir, AbsFile, RelFile
-                             , extension, getCwd_, parseFile' )
-import Fluffy.Path2          ( )
-import Fluffy.TempFile2      ( pc, with2TempFiles' )
+import Fluffy.Either      ( __right )
+import Fluffy.Functor     ( (⊳) )
+import Fluffy.Lens        ( (⊣), (⊢) )
+import Fluffy.IP4         ( IP4 )
+import Fluffy.Maybe       ( maybeE )
+import Fluffy.Monad       ( (≫) )
+import Fluffy.MonadError  ( splitMError )
+import Fluffy.MonadIO     ( MonadIO, die, dieUsage, liftIO )
+import Fluffy.Options     ( optParser )
+import Fluffy.Path        ( AbsDir, AbsFile, RelFile
+                          , extension, getCwd_, parseFile' )
+import Fluffy.TempFile    ( pc, with2TempFiles' )
 
 -- hostsdb -----------------------------
 

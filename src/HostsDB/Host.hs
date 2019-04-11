@@ -47,10 +47,10 @@ import DomainNames.Hostname  ( Hostname )
 
 import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Equalish     ( Equalish( (≏) ) )
-import Fluffy.Functor2     ( (⊳) )
+import Fluffy.Functor      ( (⊳) )
 import Fluffy.IP4          ( IP4 )
 import Fluffy.MACAddress   ( MACAddress )
-import Fluffy.Text2        ( parenthesize )
+import Fluffy.Printable    ( parenthesize )
 
 -- text --------------------------------
 

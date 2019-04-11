@@ -31,11 +31,10 @@ import DomainNames.Hostname  ( hostname, localname )
 
 -- fluffy ------------------------------
 
-import Fluffy.Functor2    ( (⊳) )
+import Fluffy.Functor     ( (⊳) )
 import Fluffy.IP4         ( ip4 )
 import Fluffy.MACAddress  ( macAddress )
-import Fluffy.Tasty       ( runTestsP_ )
-import Fluffy.Tasty2      ( assertListEqIO, withResource' )
+import Fluffy.Tasty       ( assertListEqIO, runTestsP_, withResource' )
 
 -- mono-traversable --------------------
 

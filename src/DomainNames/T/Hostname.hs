@@ -18,8 +18,7 @@ import Data.Textual  ( toString, toText )
 
 -- fluffy ------------------------------
 
-import Fluffy.Tasty   ( assertRight, runTestsP_ )
-import Fluffy.Tasty2  ( (≟) )
+import Fluffy.Tasty  ( (≟), assertRight, runTestsP_ )
 
 -- tasty -------------------------------
 

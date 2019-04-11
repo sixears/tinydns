@@ -47,12 +47,12 @@ import Dhall  ( Interpret( autoWith ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Either     ( __right )
-import Fluffy.Foldable2  ( length )
-import Fluffy.Functor2   ( (⊳) )
-import Fluffy.List       ( (⋮) )
-import Fluffy.Quasi      ( mkQuasiQuoterExp )
-import Fluffy.Text2      ( splitOn )
+import Fluffy.Either    ( __right )
+import Fluffy.Foldable  ( length )
+import Fluffy.Functor   ( (⊳) )
+import Fluffy.List      ( (⋮) )
+import Fluffy.Quasi     ( mkQuasiQuoterExp )
+import Fluffy.Text      ( splitOn )
 
 -- hashable ----------------------------
 

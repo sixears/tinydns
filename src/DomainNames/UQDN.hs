@@ -39,8 +39,8 @@ import Dhall  ( Interpret( autoWith ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Either    ( __right )
-import Fluffy.Functor2  ( (⊳) )
+import Fluffy.Either   ( __right )
+import Fluffy.Functor  ( (⊳) )
 
 -- hashable ----------------------------
 

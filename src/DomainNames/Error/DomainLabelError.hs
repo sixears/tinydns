@@ -26,8 +26,8 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Foldable2  ( length )
-import Fluffy.Lens2      ( (⋕) )
+import Fluffy.Foldable   ( length )
+import Fluffy.Lens       ( (⋕) )
 
 -- lens --------------------------------
 

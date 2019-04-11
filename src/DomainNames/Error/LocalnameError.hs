@@ -23,7 +23,7 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Lens2  ( (⋕), (⩼) )
+import Fluffy.Lens  ( (⋕), (⩼) )
 
 -- lens --------------------------------
 

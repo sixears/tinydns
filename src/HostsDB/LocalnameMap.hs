@@ -48,7 +48,7 @@ import DomainNames.Hostname              ( Localname, parseLocalname' )
 -- fluffy ------------------------------
 
 import Fluffy.Applicative  ( (⊵) )
-import Fluffy.Functor2     ( (⊳) )
+import Fluffy.Functor      ( (⊳) )
 import Fluffy.Map          ( __fromList, fromList )
 import Fluffy.Monad        ( (≫) )
 

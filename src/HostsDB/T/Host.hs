@@ -27,8 +27,7 @@ import Dhall  ( auto )
 import Fluffy.Equalish    ( (≏) )
 import Fluffy.IP4         ( ip4 )
 import Fluffy.MACAddress  ( macAddress )
-import Fluffy.Tasty       ( runTestsP_ )
-import Fluffy.Tasty2      ( (≟), ioTests, withResource' )
+import Fluffy.Tasty       ( (≟), ioTests, runTestsP_, withResource' )
 
 -- tasty -------------------------------
 

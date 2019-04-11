@@ -45,11 +45,11 @@ import DomainNames.Hostname  ( Hostname, parseHostname' )
 
 -- fluffy ------------------------------
 
-import Fluffy.Either     ( leftFail )
-import Fluffy.Foldable2  ( HasLength( length ) )
-import Fluffy.Functor2   ( (⊳) )
-import Fluffy.Map        ( __fromList, fromList )
-import Fluffy.Monad      ( (≫), returnPair )
+import Fluffy.Either    ( leftFail )
+import Fluffy.Foldable  ( HasLength( length ) )
+import Fluffy.Functor   ( (⊳) )
+import Fluffy.Map       ( __fromList, fromList )
+import Fluffy.Monad     ( (≫), returnPair )
 
 -- mono-traversable --------------------
 

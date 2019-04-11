@@ -45,7 +45,7 @@ import DomainNames.Hostname  ( Hostname, Localname )
 -- fluffy ------------------------------
 
 import Fluffy.Applicative  ( (⊵) )
-import Fluffy.Functor2     ( (⊳) )
+import Fluffy.Functor      ( (⊳) )
 import Fluffy.IP4          ( IP4 )
 
 -- text --------------------------------
