@@ -16,12 +16,12 @@ package=$($basename $($pwd))
 
 d=$($dirname $0)
 pushd $d; dir=$($basename $(pwd)); popd
-b=$($basename $( $ls dist/*.tar.gz | $tail -n 1 ) .tar.gz)
+b=$($basename $( $ls dist-newstyle/sdist/*.tar.gz | $tail -n 1 ) .tar.gz)
 version=${b#$dir-}
 
 pv=$package-$version
 
-src_dist_gz=dist/$pv.tar.gz
+src_dist_gz=dist-newstyle/sdist/$pv.tar.gz
 dist_gz=../dists/"$($basename "$src_dist_gz")"
 dist="${dist_gz%.gz}"
 

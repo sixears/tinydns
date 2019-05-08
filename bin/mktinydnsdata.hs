@@ -36,9 +36,8 @@ import Data.Textual  ( toString, toText )
 
 -- dhall -------------------------------
 
-import qualified  Dhall       as  D
-
-import Dhall  ( auto )
+import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
+              , sourceName )
 
 -- domainnames -------------------------
 
@@ -50,11 +49,8 @@ import DomainNames.Hostname              ( Hostname, Localname, (<..>) )
 -- fluffy ------------------------------
 
 import Fluffy.Either      ( __right )
-import Fluffy.Functor     ( (⊳) )
-import Fluffy.Lens        ( (⊣), (⊢) )
 import Fluffy.IP4         ( IP4 )
 import Fluffy.Maybe       ( maybeE )
-import Fluffy.Monad       ( (≫) )
 import Fluffy.MonadError  ( splitMError )
 import Fluffy.MonadIO     ( MonadIO, die, dieUsage, liftIO )
 import Fluffy.Options     ( optParser )
@@ -71,7 +67,14 @@ import HostsDB.LocalnameMap  ( unLHMap )
 
 -- lens --------------------------------
 
-import Control.Lens.Lens    ( Lens', lens )
+import Control.Lens.Lens     ( Lens', lens )
+import System.FilePath.Lens  ( directory )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Functor  ( (⊳) )
+import Data.MoreUnicode.Monad    ( (≫) )
+import Data.MoreUnicode.Lens     ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
 
@@ -156,7 +159,8 @@ __loadFileYaml__ fn = liftIO $
 
 __loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
 __loadFileDhall__ fn = liftIO $
-  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) auto
+--  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) auto
+    Data.Text.IO.readFile (toFilePath fn) ≫ inputWithSettings (defaultInputSettings & sourceName ⊢ toFilePath fn & rootDirectory ⊢ toFilePath fn ⊣ directory) auto
 
 domains ∷ [Text]
 domains = ["sixears.co.uk", "0.168.192.in-addr.arpa"];
