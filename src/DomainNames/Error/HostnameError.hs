@@ -10,9 +10,11 @@ where
 
 -- base --------------------------------
 
-import Data.Function  ( ($), id )
-import Data.Maybe     ( Maybe( Just, Nothing ) )
-import Text.Show      ( Show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Function      ( ($), id )
+import Data.Maybe         ( Maybe( Just, Nothing ) )
+import Text.Show          ( Show )
 
 -- base-unicode-symbols ----------------
 
@@ -24,11 +26,12 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Lens  ( (⋕), (⩼) )
+import Fluffy.Lens  ( (⩼) )
 
 -- lens --------------------------------
 
 import Control.Lens.Prism   ( Prism', prism' )
+import Control.Lens.Review  ( (#) )
 
 -- mtl ---------------------------------
 
@@ -58,7 +61,9 @@ import DomainNames.Error.FQDNError    ( AsFQDNError( _FQDNError ), FQDNError
 
 data HostnameError = HostnameNotFullyQualifiedE Text
                    | HostnameFQDNE FQDNError
-  deriving Show
+  deriving (Eq, Show)
+
+instance Exception HostnameError
 
 _HostnameNotFullyQualifiedE ∷ Prism' HostnameError Text
 _HostnameNotFullyQualifiedE =
@@ -93,7 +98,7 @@ instance ToHostnameError DomainError where
 
 throwAsHostnameError ∷ (ToHostnameError α, AsHostnameError ε, MonadError ε η) ⇒
                        α → η β
-throwAsHostnameError = throwError ∘ (_HostnameError ⋕) ∘ toHostnameError
+throwAsHostnameError = throwError ∘ (_HostnameError #) ∘ toHostnameError
     
 instance AsHostnameError HostnameError where
   _HostnameError = id

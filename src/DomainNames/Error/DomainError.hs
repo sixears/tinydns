@@ -12,10 +12,11 @@ where
 
 -- base --------------------------------
 
-import Data.Eq        ( Eq )
-import Data.Function  ( ($), const, id )
-import Data.Maybe     ( Maybe( Just, Nothing ) )
-import Text.Show      ( Show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Function      ( ($), const, id )
+import Data.Maybe         ( Maybe( Just, Nothing ) )
+import Text.Show          ( Show )
 
 -- base-unicode-symbols ----------------
 
@@ -27,11 +28,12 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Lens  ( (⋕), (⩼) )
+import Fluffy.Lens  ( (⩼) )
 
 -- lens --------------------------------
 
 import Control.Lens.Prism   ( Prism', prism' )
+import Control.Lens.Review  ( (#) )
 
 -- mtl ---------------------------------
 
@@ -62,6 +64,8 @@ data DomainError = DomainEmptyErr
                  | DomainLengthErr Text
                  | DomainLabelErr DomainLabelError
   deriving (Eq, Show)
+
+instance Exception DomainError
 
 instance Printable DomainError where
   print DomainEmptyErr = P.text "empty domain"
@@ -103,6 +107,6 @@ instance ToDomainError DomainLabelError where
   toDomainError = DomainLabelErr
 
 throwAsDomainError ∷ (ToDomainError α, AsDomainError ε, MonadError ε η) ⇒ α → η β
-throwAsDomainError = throwError ∘ (_DomainError ⋕) ∘ toDomainError
+throwAsDomainError = throwError ∘ (_DomainError #) ∘ toDomainError
     
 -- that's all, folks! ----------------------------------------------------------

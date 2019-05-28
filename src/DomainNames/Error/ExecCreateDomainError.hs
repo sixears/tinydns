@@ -7,8 +7,10 @@ where
 
 -- base --------------------------------
 
-import Data.Maybe  ( Maybe( Just, Nothing ) )
-import Text.Show   ( show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Maybe         ( Maybe( Just, Nothing ) )
+import Text.Show          ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
@@ -42,6 +44,9 @@ import DomainNames.Error.DomainError  ( AsDomainError( _DomainError )
 
 data ExecCreateDomainError = ECDExecCreateE ExecCreateError
                            | ECDDomainE     DomainError
+  deriving (Eq,Show)
+
+instance Exception ExecCreateDomainError
 
 instance Printable ExecCreateDomainError where
   print (ECDExecCreateE e) = P.string (show e)
@@ -49,7 +54,6 @@ instance Printable ExecCreateDomainError where
 
 _ECDExecCreateE ∷ Prism' ExecCreateDomainError ExecCreateError
 _ECDExecCreateE = prism' ECDExecCreateE (\ case (ECDExecCreateE e) → Just e; _ → Nothing)
-
 
 instance AsExecError ExecCreateDomainError where
   _ExecError = prism' (ECDExecCreateE ∘ ECExecE)

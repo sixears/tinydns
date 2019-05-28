@@ -12,9 +12,10 @@ where
 
 -- base --------------------------------
 
-import Data.Eq        ( Eq )
-import Data.Function  ( ($), id )
-import Text.Show      ( Show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Function      ( ($), id )
+import Text.Show          ( Show )
 
 -- base-unicode-symbols ----------------
 
@@ -27,11 +28,11 @@ import Data.Textual  ( Printable( print ) )
 -- fluffy ------------------------------
 
 import Fluffy.Foldable   ( length )
-import Fluffy.Lens       ( (⋕) )
 
 -- lens --------------------------------
 
 import Control.Lens.Prism   ( Prism' )
+import Control.Lens.Review  ( (#) )
 
 -- mtl ---------------------------------
 
@@ -63,6 +64,8 @@ data DomainLabelError = DomainLabelEmptyErr
                       | DomainLabelIllegalCharErr     Text
   deriving (Eq, Show)
 
+instance Exception DomainLabelError
+
 instance Printable DomainLabelError where
   print DomainLabelEmptyErr = P.text "empty domain label"
   print (DomainLabelHyphenFirstCharErr d) = P.text $ 
@@ -82,6 +85,6 @@ instance AsDomainLabelError DomainLabelError where
 
 throwAsDomainLabelError ∷ (AsDomainLabelError ε, MonadError ε η) ⇒
                           DomainLabelError → η α
-throwAsDomainLabelError = throwError ∘ (_DomainLabelError ⋕)
+throwAsDomainLabelError = throwError ∘ (_DomainLabelError #)
     
 -- that's all, folks! ----------------------------------------------------------

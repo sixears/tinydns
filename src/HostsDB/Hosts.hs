@@ -4,7 +4,7 @@
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module HostsDB.Hosts
-  ( Hosts( Hosts ), aliases, dns_servers, hosts, hostsHosts, hostIPv4
+  ( Hosts( Hosts ), aliases, dns_servers, domain, hosts, hostsHosts, hostIPv4
   , hostIPv4', hostIPv4s, lookupHost, mail_servers )
 where
 
@@ -48,6 +48,15 @@ import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Functor      ( (⊳) )
 import Fluffy.IP4          ( IP4 )
 
+-- lens --------------------------------
+
+import Control.Lens.Getter  ( view )
+import Control.Lens.Lens    ( Lens', lens )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
+
 -- text --------------------------------
 
 import Data.Text  ( Text )
@@ -66,13 +75,28 @@ import HostsDB.LocalnameMap  ( LocalnameMap )
 
 --------------------------------------------------------------------------------
 
-data Hosts = Hosts { domain       ∷ FQDN
-                   , hosts        ∷ LHostMap
-                   , dns_servers  ∷ [Localname]
-                   , mail_servers ∷ [Localname]
-                   , aliases      ∷ LocalnameMap
+data Hosts = Hosts { _domain       ∷ FQDN
+                   , _hosts        ∷ LHostMap
+                   , _dns_servers  ∷ [Localname]
+                   , _mail_servers ∷ [Localname]
+                   , _aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
+
+domain       ∷ Lens' Hosts FQDN
+domain       = lens _domain (\ hs d → hs { _domain = d })
+
+hosts        ∷ Lens' Hosts LHostMap
+hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
+
+dns_servers  ∷ Lens' Hosts [Localname]
+dns_servers  = lens _dns_servers (\ hs ds → hs { _dns_servers = ds })
+
+mail_servers ∷ Lens' Hosts [Localname]
+mail_servers = lens _mail_servers (\ hs ms → hs { _mail_servers = ms })
+
+aliases       ∷ Lens' Hosts LocalnameMap
+aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 
 hostsType ∷ Type Hosts
 hostsType = record $ Hosts ⊳ field "domain"       auto
@@ -85,14 +109,14 @@ instance Interpret Hosts where
   autoWith _ = hostsType
 
 instance Show Hosts where
-  show h = intercalate "\n" [ "HOSTS:        " ⊕ show (hosts h)
-                            , "DNS_SERVERS:  " ⊕ show (dns_servers h)
-                            , "MAIL_SERVERS: " ⊕ show (mail_servers h)
-                            , "ALIASES:      " ⊕ show (aliases h)
+  show h = intercalate "\n" [ "HOSTS:        " ⊕ show (h ⊣ hosts)
+                            , "DNS_SERVERS:  " ⊕ show (h ⊣ dns_servers)
+                            , "MAIL_SERVERS: " ⊕ show (h ⊣ mail_servers)
+                            , "ALIASES:      " ⊕ show (h ⊣ aliases)
                             ]
 
 lookupHost ∷ Hosts → Localname → Maybe Host
-lookupHost = flip HashMap.lookup ∘ unLHostMap ∘ hosts
+lookupHost = flip HashMap.lookup ∘ unLHostMap ∘ view hosts
 
 hostIPv4 ∷ Hosts → Localname → Maybe IP4
 hostIPv4 hs h = ipv4 ⊳ lookupHost hs h
@@ -103,7 +127,7 @@ hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
                  in maybe (Left noSuchH) Right $ hostIPv4 hs h
 
 hostsHosts ∷ Hosts → [Host]
-hostsHosts = lhmHosts ∘ hosts
+hostsHosts = lhmHosts ∘ view hosts
 
 hostIPv4s ∷ Hosts → [(Hostname,IP4)]
 hostIPv4s = fmap ( \ h → (hname h, ipv4 h) ) ∘ hostsHosts

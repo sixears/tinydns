@@ -36,9 +36,17 @@ import Fluffy.IP4         ( ip4 )
 import Fluffy.MACAddress  ( macAddress )
 import Fluffy.Tasty       ( assertListEqIO, runTestsP_, withResource' )
 
+-- lens --------------------------------
+
+import Control.Lens.Getter  ( view )
+
 -- mono-traversable --------------------
 
 import Data.MonoTraversable  ( otoList )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
 
 -- tasty -------------------------------
 
@@ -125,17 +133,17 @@ hostsTestText =
 dhallTests' ∷ IO Hosts → TestTree
 dhallTests' hs =
   testGroup "dhallTests" $ assertListEqIO "aliases"
-                                              (otoList $ aliases hostsTestHosts)
-                                              (otoList ∘ aliases ⊳ hs)
+                                              (otoList $ hostsTestHosts ⊣ aliases)
+                                              (otoList ∘ view aliases ⊳ hs)
                          ⊕ assertListEqIO "dns_servers"
-                                              (dns_servers hostsTestHosts)
-                                              (dns_servers ⊳ hs)
+                                              (hostsTestHosts ⊣ dns_servers)
+                                              (view dns_servers ⊳ hs)
                          ⊕ assertListEqIO "mail_servers"
-                                              (mail_servers hostsTestHosts)
-                                              (mail_servers ⊳ hs)
+                                              (hostsTestHosts ⊣ mail_servers)
+                                              (view mail_servers ⊳ hs)
                          ⊕ assertListEqIO "hosts"
-                                              (otoList $ hosts hostsTestHosts)
-                                              (otoList ∘ hosts ⊳ hs)
+                                              (otoList $ hostsTestHosts ⊣ hosts)
+                                              (otoList ∘ view hosts ⊳ hs)
 dhallTests ∷ TestTree
 dhallTests = withResource' (D.input auto hostsTestText) dhallTests'
 

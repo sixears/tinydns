@@ -11,10 +11,11 @@ where
 
 -- base --------------------------------
 
-import Data.Eq        ( Eq )
-import Data.Function  ( ($), id )
-import Data.Maybe     ( Maybe( Just, Nothing ) )
-import Text.Show      ( Show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Function      ( ($), id )
+import Data.Maybe         ( Maybe( Just, Nothing ) )
+import Text.Show          ( Show )
 
 -- base-unicode-symbols ----------------
 
@@ -26,11 +27,12 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Lens  ( (⋕), (⩼) )
+import Fluffy.Lens  ( (⩼) )
 
 -- lens --------------------------------
 
 import Control.Lens.Prism   ( Prism', prism' )
+import Control.Lens.Review  ( (#) )
 
 -- mtl ---------------------------------
 
@@ -60,6 +62,8 @@ import DomainNames.Error.DomainError  ( AsDomainError( _DomainError )
 data FQDNError = FQDNNotFullyQualifiedErr Text
                | DomainErrorErr DomainError
   deriving (Eq, Show)
+
+instance Exception FQDNError
 
 instance Printable FQDNError where
   print (FQDNNotFullyQualifiedErr t) =
@@ -100,6 +104,6 @@ instance ToFQDNError DomainError where
   toFQDNError = DomainErrorErr
 
 throwAsFQDNError ∷ (ToFQDNError α, AsFQDNError ε, MonadError ε η) ⇒ α → η β
-throwAsFQDNError = throwError ∘ (_FQDNError ⋕) ∘ toFQDNError
+throwAsFQDNError = throwError ∘ (_FQDNError #) ∘ toFQDNError
     
 -- that's all, folks! ----------------------------------------------------------

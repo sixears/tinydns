@@ -6,7 +6,7 @@
 
 module HostsDB.Host
   ( Host( Host ), HostComment( HostComment ), HostDesc( HostDesc )
-  , comments, desc, hname, hostType, ipv4, mac )
+  , comments, desc, hname, hostType, ipv4 )
 where
 
 -- aeson -------------------------------

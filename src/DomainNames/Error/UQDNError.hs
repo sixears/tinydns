@@ -10,9 +10,11 @@ where
 
 -- base --------------------------------
 
-import Data.Function  ( ($), id )
-import Data.Maybe     ( Maybe( Just, Nothing ) )
-import Text.Show      ( Show )
+import Control.Exception  ( Exception )
+import Data.Eq            ( Eq )
+import Data.Function      ( ($), id )
+import Data.Maybe         ( Maybe( Just, Nothing ) )
+import Text.Show          ( Show )
 
 -- base-unicode-symbols ----------------
 
@@ -24,11 +26,12 @@ import Data.Textual  ( Printable( print ) )
 
 -- fluffy ------------------------------
 
-import Fluffy.Lens  ( (⋕), (⩼) )
+import Fluffy.Lens  ( (⩼) )
 
 -- lens --------------------------------
 
 import Control.Lens.Prism   ( Prism', prism' )
+import Control.Lens.Review  ( (#) )
 
 -- mtl ---------------------------------
 
@@ -57,7 +60,9 @@ import DomainNames.Error.DomainError  ( AsDomainError( _DomainError )
 
 data UQDNError = UQDNFullyQualifiedErr Text
                | DomainErrorErr DomainError
-  deriving Show
+  deriving (Eq, Show)
+
+instance Exception UQDNError
 
 instance Printable UQDNError where
   print (UQDNFullyQualifiedErr t) =
@@ -98,6 +103,6 @@ instance ToUQDNError DomainError where
   toUQDNError = DomainErrorErr
 
 throwAsUQDNError ∷ (ToUQDNError α, AsUQDNError ε, MonadError ε η) ⇒ α → η β
-throwAsUQDNError = throwError ∘ (_UQDNError ⋕) ∘ toUQDNError
+throwAsUQDNError = throwError ∘ (_UQDNError #) ∘ toUQDNError
     
 -- that's all, folks! ----------------------------------------------------------
