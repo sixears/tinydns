@@ -58,6 +58,10 @@ import Data.MonoTraversable  ( Element
                                            , ofoldr, ofoldr1Ex )
                              )
 
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
+
 -- text --------------------------------
 
 import Data.Text  ( Text, unpack )
@@ -138,7 +142,7 @@ hmHosts ∷ HostMap → [Host]
 hmHosts (HostMap hm) = HashMap.elems hm
 
 hostMapType ∷ Type HostMap
-hostMapType = let hnKey h = (hname h, h)
+hostMapType = let hnKey h = (h ⊣ hname, h)
                in HostMap ∘ __fromList ∘ fmap hnKey ⊳ D.list hostType
 
 instance Interpret HostMap where

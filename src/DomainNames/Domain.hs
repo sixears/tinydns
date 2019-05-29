@@ -6,9 +6,9 @@
 {-# LANGUAGE ViewPatterns               #-}
 
 module DomainNames.Domain
-  ( Domain( (<:>), domainHead, domainLabels, prepend )
-  , DomainLabel, DomainLabels
-  , dLabel, dLabels, domainLabel, parseDomainLabel, parseDomainLabel'
+  ( Domain( (<:>), domainHead, prepend )
+  , DomainLabel, DomainLabels, IsDomainLabels( domainLabels, dLabels )
+  , dLabel, domainLabel, parseDomainLabel, parseDomainLabel'
   , parseDomainLabels'
   )
 where
@@ -57,6 +57,11 @@ import Fluffy.Text      ( splitOn )
 -- hashable ----------------------------
 
 import Data.Hashable  ( Hashable )
+
+-- lens --------------------------------
+
+import Control.Lens.Getter  ( view )
+import Control.Lens.Iso     ( Iso', from, iso )
 
 -- mtl ---------------------------------
 
@@ -161,8 +166,18 @@ dLabel = domainLabel
 
 ------------------------------------------------------------
 
-newtype DomainLabels = DomainLabels (NonEmpty DomainLabel)
+class IsDomainLabels δ where
+  domainLabels ∷ Iso' δ DomainLabels
+  dLabels      ∷ Iso' δ (NonEmpty DomainLabel)
+  dLabels      = iso (view dLabels ∘ view domainLabels)
+                     (view (from domainLabels) ∘ view (from dLabels))
+
+newtype DomainLabels = DomainLabels { unDomainLabels ∷ NonEmpty DomainLabel }
   deriving (Eq, Hashable, Show)
+
+instance IsDomainLabels DomainLabels where
+  domainLabels = id
+  dLabels = iso unDomainLabels DomainLabels
 
 {- | Render a domain, without a trailing dot even for FQDN, to make the 253-char
      check that excludes any trailing dot
@@ -202,21 +217,16 @@ parseDomainLabels' = parseDomainLabels
 
 ------------------------------------------------------------
 
-class Domain δ where
-  domainLabels ∷ δ → DomainLabels
+class IsDomainLabels δ ⇒ Domain δ where
+--  domainLabels ∷ δ → DomainLabels
   prepend ∷ (AsDomainError ε, MonadError ε η) ⇒ DomainLabel → δ → η δ
   domainHead ∷ δ → DomainLabel
 
   (<:>) ∷ MonadError DomainError η ⇒ DomainLabel → δ → η δ
   (<:>) = prepend
 
-  dLabels ∷ δ → NonEmpty DomainLabel
-  dLabels = dLabels ∘ domainLabels
-
 instance Domain DomainLabels where
-  domainLabels                  = id
   prepend d  (DomainLabels ds) = checkDomainLength (d ⋮ ds)
   domainHead (DomainLabels ds) = head ds
-  dLabels    (DomainLabels ds) = ds
 
 -- that's all, folks! ----------------------------------------------------------

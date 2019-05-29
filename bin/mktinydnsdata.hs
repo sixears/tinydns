@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE QuasiQuotes         #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 
 -- !!! REWRITE Fluffy.TempFile TO NOT USE LAZY IO !!!
@@ -18,21 +19,27 @@ import Data.Either          ( Either( Left, Right ), either, partitionEithers )
 import Data.Function        ( ($), (&), id )
 import Data.Functor         ( fmap )
 import Data.List            ( sortOn )
+import Data.List.NonEmpty   ( NonEmpty( (:|) ) )
 import Data.Maybe           ( Maybe( Just ) )
 import Data.String          ( String )
-import Data.Tuple           ( uncurry )
+import Data.Tuple           ( fst, snd, swap, uncurry )
 import System.Exit          ( ExitCode( ExitFailure ) )
 import System.IO            ( Handle, IO, hClose )
 import Text.Show            ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
+import Data.Eq.Unicode        ( (≡) )
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
 
 -- bytestring --------------------------
 
 import Data.ByteString  ( readFile )
+
+-- containers --------------------------
+
+import Data.Map  ( Map, mapWithKey, toList )
 
 -- data-textual ------------------------
 
@@ -45,6 +52,7 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 -- domainnames -------------------------
 
+import DomainNames.Domain                ( IsDomainLabels( dLabels ) )
 import DomainNames.Error.DomainError     ( AsDomainError )
 import DomainNames.Error.ExecCreateDomainError ( ExecCreateDomainError )
 import DomainNames.FQDN                  ( FQDN, fqdn )
@@ -53,8 +61,11 @@ import DomainNames.Hostname              ( Hostname, Localname
 
 -- fluffy ------------------------------
 
+import Fluffy.Containers.NonEmptyHashSet
+                             ( NonEmptyHashSet, toNEList )
 import Fluffy.IP4            ( IP4, ip4 )
 import Fluffy.MACAddress     ( mac )
+import Fluffy.MapUtils       ( fromListWithDups )
 import Fluffy.Maybe          ( maybeE )
 import Fluffy.MonadError     ( splitMError )
 import Fluffy.MonadIO        ( MonadIO, die, dieUsage, liftIO )
@@ -62,13 +73,16 @@ import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Options        ( optParser )
 import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseAbsFile_, parseFile' )
+import Fluffy.Printable      ( __error__ )
 import Fluffy.TempFile       ( pc, with2TempFiles' )
 
 -- hostsdb -----------------------------
 
 import HostsDB.Host          ( Host( Host ), hname, ipv4 )
 import HostsDB.Hosts         ( Hosts( Hosts ), aliases, dns_servers, domain
-                             , hostsHosts, hostIPv4', lookupHost, mail_servers )
+                             , hostIPv4', hostIPv4s, lookupHost
+                             , mail_servers
+                             )
 import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ), unLHMap )
 
@@ -117,7 +131,7 @@ import Data.Text.IO  ( putStrLn )
 
 -- tfmt --------------------------------
 
-import Text.Fmt  ( fmtT )
+import Text.Fmt  ( fmt, fmtT )
 
 -- unix --------------------------------
 
@@ -206,29 +220,33 @@ addNSCmd fn tmpfn ip = ( \ d → CmdSpec Paths.tinydns_edit [ toText fn, toText 
 
 ----------------------------------------
 
-addHostCmd ∷ AbsFile → AbsFile → Host → [CmdSpec]
-addHostCmd fn tmpfn h = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "host", toText $ hname h, toText $ ipv4 h ] ]
+addHostCmd ∷ AbsFile → AbsFile → Hostname → IP4 → [CmdSpec]
+addHostCmd fn tmpfn hn ip = [ CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "host", toText hn, toText ip ] ]
 
 ----------------------------------------
 
 addAliasCmd ∷ AbsFile → AbsFile → Host → Hostname → CmdSpec
-addAliasCmd fn tmpfn h name = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText name, toText $ ipv4 h ]
+addAliasCmd fn tmpfn h name = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "alias", toText name, toText $ h ⊣ ipv4 ]
 
 ----------------------------------------
 
 addMxCmd ∷ AbsFile → AbsFile → Host → CmdSpec
-addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "mx", toText (hname h), toText $ ipv4 h ]
+addMxCmd fn tmpfn h = CmdSpec Paths.tinydns_edit [ toText fn, toText tmpfn, "add", "mx", toText (h ⊣ hname), toText $ h ⊣ ipv4 ]
 
 ----------------------------------------
 
 testHosts ∷ Hosts
 testHosts =
   let lfoo          = [localname|foo|]
+      lfoowl        = [localname|foow-l|]
       lbaz          = [localname|baz|]
       dmn           = [fqdn|sixears.co.uk.|]
-      foohost       = Host [hostname|bar.sixears.co.uk.|] [ip4|192.168.1.2|]
+      foohost       = Host [hostname|foo.sixears.co.uk.|] [ip4|192.168.1.2|]
                            "descn" ["comment"] (Just [mac|01:23:45:67:89:0A|])
-      hosts         = LHostMap $ HashMap.fromList [(lfoo,foohost)]
+      foowlhost     = Host [hostname|foo-wl.sixears.co.uk.|] [ip4|192.168.1.2|]
+                           "descn" ["comment"] (Just [mac|0A:89:67:45:23:01|])
+      hosts         = LHostMap $ HashMap.fromList [ (lfoo,foohost)
+                                                  , (lfoowl,foowlhost)]
       dns_servers_  = [lfoo]
       mail_servers_ = [lfoo]
       aliases_      = LocalnameMap $ HashMap.fromList [(lbaz,lfoo)]
@@ -244,7 +262,7 @@ main = do
   hs   ← case opts ⊣ testMode of
            TestMode   → return testHosts
            NoTestMode → let badExt = [fmtT|file ext not recognized: '%t'|] ext
-                         in case ext of 
+                         in case ext of
                               ".yaml"  → __loadFileYaml__  (opts ⊣ input)
                               ".dhall" → __loadFileDhall__ (opts ⊣ input)
                               _        → dieUsage badExt
@@ -299,7 +317,40 @@ __mkData'__ hs fn1 fn2 = do
 
     (es, _)   → die (ExitFailure 3) (unlines es)
 
-  forM_ (addHostCmd fn1 fn2 ⊳ sortOn ipv4 (hostsHosts hs)) (mapM_ __runProc__)
+  let dupIPHosts ∷ Map IP4 (NonEmptyHashSet Hostname)
+      hostsByIP  ∷ Map IP4 Hostname
+      (dupIPHosts, hostsByIP) = fromListWithDups $ swap ⊳ hostIPv4s hs
+
+      -- given two hostnames; if one is the other+"-wl", then return the base
+      -- name - else barf
+      checkWL' ∷ Hostname → Hostname → Hostname
+      checkWL' h1 h2 = let (l1 :| d1) = h1 ⊣ dLabels
+                           (l2 :| d2) = h2 ⊣ dLabels
+                           errNm = [fmt|names are not a+wl: '%T' vs. '%T'|] h1 h2
+                           errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
+                        in if d1 ≡ d2
+                           then if toText l1 ≡ toText l2 ⊕ "-wl"
+                                then h2
+                                else if toText l2 ≡ toText l1 ⊕ "-wl"
+                                     then h1
+                                     else __error__ errNm
+                           else __error__ errDm
+      -- check that ip4, hostnames is a pair of hostnames where one
+      -- is the other + "-wl"; return the base name
+      checkWL ∷ IP4 → NonEmptyHashSet Hostname → Hostname
+      checkWL i hh = let errTooMany l = [fmt|too many hosts for IP %T (%L)|] i l
+                      in case toNEList hh of
+                           h  :| []   → h
+                           h1 :| [h2] → checkWL' h1 h2
+                           lh         → __error__ $ errTooMany lh
+      -- check that the map ip4 -> hostnames has only pairs of hostnames where one
+      -- is the other + "-wl"; return the base name in each case
+      filterWL ∷ Map IP4 (NonEmptyHashSet Hostname) → Map IP4 Hostname
+      filterWL = mapWithKey checkWL
+  let hostList'' ∷ [(Hostname,IP4)]
+      hostList'' = (swap ⊳ toList hostsByIP) ⊕ (swap ⊳ toList (filterWL dupIPHosts))
+  forM_ ((\ h → addHostCmd fn1 fn2 (fst h) (snd h)) ⊳ sortOn snd hostList'')
+        (mapM_ __runProc__)
 
   case forM (unLHMap $ hs ⊣ aliases) ( \ h → maybeE h (lookupHost hs h) ) of
     Left  h  → die (ExitFailure 3) h
@@ -333,7 +384,7 @@ __with2Temps__ io = do
   splitMError (asIOError $ io tmpfn1 tmpfn2) ≫ \ case
     Left e → die (ExitFailure 4) e
     Right r → return r
--}  
+-}
   (tmpfn1, h1) ← liftIO $ mkstemps "/tmp/tinydns-data-" ""
   (tmpfn2, h2) ← liftIO $ mkstemps "/tmp/tinydns-data-" ".tmp"
   liftIO $ hClose h1

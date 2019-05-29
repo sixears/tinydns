@@ -119,7 +119,7 @@ lookupHost ∷ Hosts → Localname → Maybe Host
 lookupHost = flip HashMap.lookup ∘ unLHostMap ∘ view hosts
 
 hostIPv4 ∷ Hosts → Localname → Maybe IP4
-hostIPv4 hs h = ipv4 ⊳ lookupHost hs h
+hostIPv4 hs h = view ipv4 ⊳ lookupHost hs h
 
 hostIPv4' ∷ Hosts → Localname → Either Text IP4
 hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
@@ -130,6 +130,6 @@ hostsHosts ∷ Hosts → [Host]
 hostsHosts = lhmHosts ∘ view hosts
 
 hostIPv4s ∷ Hosts → [(Hostname,IP4)]
-hostIPv4s = fmap ( \ h → (hname h, ipv4 h) ) ∘ hostsHosts
+hostIPv4s = fmap ( \ h → (h ⊣ hname, h ⊣ ipv4) ) ∘ hostsHosts
 
 -- that's all, folks! ----------------------------------------------------------

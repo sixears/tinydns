@@ -52,6 +52,14 @@ import Fluffy.IP4          ( IP4 )
 import Fluffy.MACAddress   ( MACAddress )
 import Fluffy.Printable    ( parenthesize )
 
+-- lens --------------------------------
+
+import Control.Lens.Lens  ( Lens', lens )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
+
 -- text --------------------------------
 
 import qualified  Data.Text  as  Text
@@ -96,13 +104,29 @@ instance IsString HostComment where
 
 ------------------------------------------------------------
 
-data Host = Host { hname    ∷ Hostname
-                 , ipv4     ∷ IP4
-                 , desc     ∷ HostDesc
-                 , comments ∷ [HostComment]
-                 , mac      ∷ Maybe MACAddress
+data Host = Host { _hname    ∷ Hostname
+                 , _ipv4     ∷ IP4
+                 , _desc     ∷ HostDesc
+                 , _comments ∷ [HostComment]
+                 , _mac      ∷ Maybe MACAddress
                  }
   deriving (Eq, FromJSON, Generic, Show)
+
+hname    ∷ Lens' Host Hostname
+hname    = lens _hname (\ h n → h { _hname = n })
+
+ipv4     ∷ Lens' Host IP4
+ipv4    = lens _ipv4 (\ h i → h { _ipv4 = i })
+
+desc     ∷ Lens' Host HostDesc
+desc    = lens _desc (\ h d → h { _desc = d })
+
+comments ∷ Lens' Host [HostComment]
+comments    = lens _comments (\ h cs → h { _comments = cs })
+
+mac      ∷ Lens' Host (Maybe MACAddress)
+mac    = lens _mac (\ h m → h { _mac = m })
+
 
 instance Equalish Host where
   a ≏ b = let cmp' ∷ Eq α ⇒ (α → Text) → Text → α → α → [Text]
@@ -112,16 +136,15 @@ instance Equalish Host where
                                             t (f x)             (f y) ]
               cmp ∷ (Eq α, Printable α) ⇒ Text → α → α → [Text]
               cmp = cmp' toText
-           in nonEmpty $ List.concat [ cmp "Hostname"        (hname a) (hname b)
-                                     , cmp "IPv4"            (ipv4  a) (ipv4  b)
-                                     , cmp "Description"     (desc  a) (desc  b)
-                                     , cmp' -- (\ xs → [fmt|[%L]|] (unHostComments xs))
-                                            ([fmt|[%L]|])
+           in nonEmpty $ List.concat [ cmp "Hostname"      (a ⊣ hname) (b ⊣ hname)
+                                     , cmp "IPv4"          (a ⊣ ipv4) (b ⊣ ipv4)
+                                     , cmp "Description"   (a ⊣ desc) (b ⊣ desc)
+                                     , cmp' ([fmt|[%L]|])
                                             "Comments"
-                                                     (comments  a) (comments  b)
+                                                   (a ⊣ comments) (b ⊣ comments)
                                      , cmp' (maybe "Nothing"
                                                       (("Just " ⊕) ∘ toText))
-                                            "MACAddress"     (mac   a) (mac   b)
+                                            "MACAddress"     (a ⊣ mac) (b ⊣ mac)
                                      ]
 
 hostType ∷ Type Host
@@ -135,12 +158,12 @@ instance Interpret Host where
   autoWith _ = hostType
 
 instance Printable Host where
-  print h = P.text $ Text.concat [ [fmt|%T %T (%T)|] (hname h) (ipv4 h) (desc h)
-                                 , maybe "" ((" " ⊕) ∘ parenthesize ∘ toText)
-                                            (mac h)
-                                 , case comments h of
-                                     [] → ""
-                                     cs → " # " ⊕ intercalate " // " (toText ⊳ cs)
-                                 ]
+  print h = P.text $
+              Text.concat [ [fmt|%T %T (%T)|] (h ⊣ hname) (h ⊣ ipv4) (h ⊣ desc)
+                          , maybe "" ((" " ⊕) ∘ parenthesize ∘ toText) (h ⊣ mac)
+                          , case h ⊣ comments of
+                              [] → ""
+                              cs → " # " ⊕ intercalate " // " (toText ⊳ cs)
+                          ]
 
 -- that's all, folks! ----------------------------------------------------------

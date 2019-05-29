@@ -17,6 +17,10 @@ import Fluffy.Functor  ( (⊳) )
 import Fluffy.List     ( (⋮) )
 import Fluffy.Tasty    ( (≟) )
 
+-- lens --------------------------------
+
+import Control.Lens.Getter  ( view )
+
 -- tasty -------------------------------
 
 import Test.Tasty  ( TestTree, testGroup )
@@ -43,7 +47,7 @@ tests =
   testGroup "FQDN"
     [ testCase "parseFQDN'" $
           Right ([dLabel|foo|] ⋮ [dLabel|bar|] ⋮ [])
-        ≟ dLabels ⊳ parseFQDN' ("foo.bar." ∷ Text)
+        ≟ view dLabels ⊳ parseFQDN' ("foo.bar." ∷ Text)
     ]
 
 -- that's all, folks! ----------------------------------------------------------

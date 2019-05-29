@@ -48,6 +48,14 @@ import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 import Data.Hashable  ( Hashable )
 
+-- lens --------------------------------
+
+import Control.Lens.Iso  ( iso )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
+
 -- mtl ---------------------------------
 
 import Control.Monad.Except  ( MonadError )
@@ -73,8 +81,8 @@ import Data.Yaml  ( FromJSON( parseJSON ), Value( String ) )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import DomainNames.Domain             ( Domain( domainHead, domainLabels
-                                              , prepend )
+import DomainNames.Domain             ( Domain( domainHead, prepend )
+                                      , IsDomainLabels( domainLabels )
                                       , DomainLabels, parseDomainLabels'
                                       )
 import DomainNames.Error.DomainError  ( DomainError( DomainEmptyErr ) )
@@ -85,12 +93,14 @@ import DomainNames.Error.FQDNError    ( AsFQDNError
 
 --------------------------------------------------------------------------------
 
-newtype FQDN = FQDN DomainLabels
+newtype FQDN = FQDN { unFQDN ∷ DomainLabels }
   deriving (Eq, Hashable, Show)
 
+instance IsDomainLabels FQDN where
+  domainLabels = iso unFQDN FQDN
+
 instance Domain FQDN where
-  domainLabels (FQDN dls) = dls
-  prepend d f = FQDN ⊳ (prepend d (domainLabels f))
+  prepend d f = FQDN ⊳ (prepend d (f ⊣ domainLabels))
   domainHead (FQDN dls) = domainHead dls
 
 instance Printable FQDN where

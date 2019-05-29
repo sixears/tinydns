@@ -58,6 +58,10 @@ import Data.MonoTraversable  ( Element
                                            , ofoldr, ofoldr1Ex )
                              )
 
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Lens  ( (⊣) )
+
 -- text --------------------------------
 
 import Data.Text  ( Text, unpack )
@@ -139,7 +143,7 @@ lhmHosts ∷ LHostMap → [Host]
 lhmHosts (LHostMap hm) = HashMap.elems hm
 
 hostMapType ∷ Type LHostMap
-hostMapType = let localHNKey h = (hostlocal (hname h), h)
+hostMapType = let localHNKey h = (hostlocal (h ⊣ hname), h)
                in LHostMap ∘ __fromList ∘ fmap localHNKey ⊳ D.list hostType
 
 instance Interpret LHostMap where

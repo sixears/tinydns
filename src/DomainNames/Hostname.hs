@@ -50,6 +50,11 @@ import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 import Data.Hashable  ( Hashable )
 
+-- lens --------------------------------
+
+import Control.Lens.Getter  ( view )
+import Control.Lens.Iso     ( from, iso )
+
 -- mtl ---------------------------------
 
 import Control.Monad.Except  ( MonadError )
@@ -71,8 +76,10 @@ import Data.Yaml  ( FromJSON( parseJSON ), Value( String ) )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import DomainNames.Domain               ( DomainLabel, domainHead
-                                        , prepend, parseDomainLabel' )
+import DomainNames.Domain               ( DomainLabel
+                                        , IsDomainLabels( domainLabels )
+                                        , domainHead, prepend, parseDomainLabel'
+                                        )
 import DomainNames.Error.DomainError    ( AsDomainError
                                         , DomainError( DomainEmptyErr ) )
 import DomainNames.Error.LocalnameError ( AsLocalnameError, LocalnameError
@@ -119,11 +126,14 @@ localname = let parseExp ∷ String → ExpQ
 
 ------------------------------------------------------------
 
-newtype Hostname = Hostname FQDN
+newtype Hostname = Hostname { unHostname ∷ FQDN }
   deriving (Eq, Generic, Hashable, Show)
 
 instance Printable Hostname where
   print (Hostname fq) = print fq
+
+instance IsDomainLabels Hostname where
+  domainLabels = iso (view domainLabels ∘ unHostname) (Hostname ∘ view (from domainLabels))
 
 ----------------------------------------
 
