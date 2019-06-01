@@ -5,22 +5,29 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE QuasiQuotes         #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE UnicodeSyntax       #-}
 
+-- !!! Cleanup Temp Files !!!
 -- !!! REWRITE Fluffy.TempFile TO NOT USE LAZY IO !!!
 
 import Prelude ( error )
 
 -- base --------------------------------
 
-import Control.Monad        ( forM_, forM, mapM, mapM_, return )
+import Control.Monad        ( forM_, forM, mapM, mapM_, return, when )
 import Data.Bifunctor       ( first )
+import Data.Bool            ( Bool )
 import Data.Either          ( Either( Left, Right ), either, partitionEithers )
+import Data.Eq              ( Eq )
+import Data.Foldable        ( Foldable, toList )
 import Data.Function        ( ($), (&), id )
 import Data.Functor         ( fmap )
 import Data.List            ( sortOn )
 import Data.List.NonEmpty   ( NonEmpty( (:|) ) )
 import Data.Maybe           ( Maybe( Just ) )
+import Data.Monoid          ( Monoid( mconcat, mempty ) )
+import Data.Semigroup       ( Semigroup( (<>) ) )
 import Data.String          ( String )
 import Data.Tuple           ( fst, snd, swap, uncurry )
 import System.Exit          ( ExitCode( ExitFailure ) )
@@ -39,7 +46,8 @@ import Data.ByteString  ( readFile )
 
 -- containers --------------------------
 
-import Data.Map  ( Map, mapWithKey, toList )
+import qualified  Data.Map  as  Map
+import Data.Map  ( mapAccumWithKey )
 
 -- data-textual ------------------------
 
@@ -68,12 +76,11 @@ import Fluffy.MACAddress     ( mac )
 import Fluffy.MapUtils       ( fromListWithDups )
 import Fluffy.Maybe          ( maybeE )
 import Fluffy.MonadError     ( splitMError )
-import Fluffy.MonadIO        ( MonadIO, die, dieUsage, liftIO )
+import Fluffy.MonadIO        ( MonadIO, die, dieUsage, liftIO, unlink_ )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Options        ( optParser )
 import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseAbsFile_, parseFile' )
-import Fluffy.Printable      ( __error__ )
 import Fluffy.TempFile       ( pc, with2TempFiles' )
 
 -- hostsdb -----------------------------
@@ -115,6 +122,10 @@ import Path  ( File, Path, (</>), toFilePath )
 
 -- proclib -----------------------------
 
+import ProcLib.CommonOpt.DryRun       ( DryRun, HasDryRunLevel( dryRunLevel )
+                                      , dryRunOn, dryRunP )
+import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel( verboseLevel ), Verbose
+                                      , verboseOn, verboseP )
 import ProcLib.Error.CreateProcError  ( AsCreateProcError )
 import ProcLib.Error.ExecError        ( AsExecError )
 import ProcLib.Error.ExecCreateError  ( ExecCreateError )
@@ -156,21 +167,23 @@ import qualified  TinyDNS.Paths  as  Paths
 
 ------------------------------------------------------------
 
-data Debug = Debug | NoDebug
+data Clean = Clean | NoClean            deriving (Eq, Show)
 data TestMode = TestMode | NoTestMode
 
 ------------------------------------------------------------
 
-data Options = Options { _input    ∷ AbsFile
-                       , _debug    ∷ Debug
+data Options = Options { _dryRun   ∷ DryRun
+                       , _verbose  ∷ Verbose
+                       , _input    ∷ AbsFile
+                       , _clean    ∷ Clean
                        , _testMode ∷ TestMode
                        }
 
 input ∷ Lens' Options AbsFile
 input = lens _input (\ o i → o { _input = i })
 
-debug ∷ Lens' Options Debug
-debug = lens _debug (\ o d → o { _debug = d })
+clean ∷ Lens' Options Clean
+clean = lens _clean (\ o d → o { _clean = d })
 
 testMode ∷ Lens' Options TestMode
 testMode = lens _testMode (\ o t → o { _testMode = t })
@@ -190,8 +203,10 @@ readAbsFile cwd = eitherReader go
 parseOptions ∷ AbsDir → OptParse.Parser Options
 parseOptions cwd =
   let helpText = "don't delete intermediate files"
-   in Options ⊳ argument (readAbsFile cwd) (metavar "HOSTS.dhall")
-              ⊵ flag NoDebug Debug (long "debug" ⊕ help helpText)
+   in Options ⊳ dryRunP
+              ⊵ verboseP
+              ⊵ argument (readAbsFile cwd) (metavar "HOSTS.dhall")
+              ⊵ flag Clean NoClean (long "no-clean" ⊕ help helpText)
               ⊵ flag NoTestMode TestMode (long "test" ⊕ help "use test data")
 
 -- | Perform some IO within a temporary directory freshly created by `mkTempDir`.
@@ -268,8 +283,7 @@ main = do
                               _        → dieUsage badExt
 
 
---  __withTemps__ $ __mkData__ hs
-  __with2Temps__ $ __mkData'__ hs
+  __with2Temps__ (opts ⊣ clean ≡ NoClean) $ __mkData__ hs
 
 ----------------------------------------
 
@@ -277,15 +291,8 @@ runProc ∷ (MonadIO μ, AsCreateProcError ε, AsExecError ε, MonadError ε μ)
           CmdSpec → μ ()
 runProc c = runProcIO (defRunProcOpts & verboseL ⊢ 1) $ mkProc_ c
 
-runProc' ∷ CmdSpec → IO (Either ExecCreateError ())
-runProc' = splitMError ∘ runProc
-
-runProc'' ∷ (MonadIO μ, MonadError ExecCreateError μ) ⇒
-            CmdSpec → μ ()
-runProc'' = runProc
-
 __runProc__ ∷ MonadIO μ ⇒ CmdSpec → μ ()
-__runProc__ = exceptIOThrow ∘ runProc''
+__runProc__ = exceptIOThrow ∘ runProc @_ @ExecCreateError
 
 ----------------------------------------
 
@@ -304,52 +311,71 @@ addAliasCmds''  ∷ MonadIO μ ⇒
                   AbsFile → AbsFile → FQDN → HashMap Localname Host → μ ()
 addAliasCmds'' fn1 fn2 d as = exceptIOThrow $ addAliasCmds' fn1 fn2 d as
 
-__mkData__ ∷ Hosts → (AbsFile, Handle) → (AbsFile, Handle) → IO ()
-__mkData__ hs (fn1,h1) (fn2,h2) = do
-  hClose h1
-  hClose h2
-  __mkData'__ hs fn1 fn2
+newtype ErrTs = ErrTs [Text]
 
-__mkData'__ ∷ Hosts → AbsFile → AbsFile → IO ()
-__mkData'__ hs fn1 fn2 = do
+toTexts ∷ ErrTs → [Text]
+toTexts (ErrTs ts) = ts
+
+errT ∷ Text → ErrTs
+errT t = ErrTs [t]
+
+instance Semigroup ErrTs where
+  (ErrTs es) <> (ErrTs es') = ErrTs (es ⊕ es')
+
+instance Monoid ErrTs where
+  mempty = ErrTs []
+
+ф ∷ Monoid α ⇒ α
+ф = mempty
+ю ∷ (Foldable φ, Monoid α) ⇒ φ α → α
+ю = mconcat ∘ toList
+
+__mkData__ ∷ Hosts → AbsFile → AbsFile → IO ()
+__mkData__ hs fn1 fn2 = do
   case partitionEithers $ hostIPv4' hs ⊳ hs ⊣ dns_servers of
     ([], ips) → forM_ ips $ \ ip → forM_ (addNSCmd fn1 fn2 ip) __runProc__
 
     (es, _)   → die (ExitFailure 3) (unlines es)
 
-  let dupIPHosts ∷ Map IP4 (NonEmptyHashSet Hostname)
-      hostsByIP  ∷ Map IP4 Hostname
+  let dupIPHosts ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
+      hostsByIP  ∷ Map.Map IP4 Hostname
       (dupIPHosts, hostsByIP) = fromListWithDups $ swap ⊳ hostIPv4s hs
 
       -- given two hostnames; if one is the other+"-wl", then return the base
       -- name - else barf
-      checkWL' ∷ Hostname → Hostname → Hostname
-      checkWL' h1 h2 = let (l1 :| d1) = h1 ⊣ dLabels
-                           (l2 :| d2) = h2 ⊣ dLabels
-                           errNm = [fmt|names are not a+wl: '%T' vs. '%T'|] h1 h2
-                           errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
-                        in if d1 ≡ d2
-                           then if toText l1 ≡ toText l2 ⊕ "-wl"
-                                then h2
-                                else if toText l2 ≡ toText l1 ⊕ "-wl"
-                                     then h1
-                                     else __error__ errNm
-                           else __error__ errDm
+      checkWL' ∷ ErrTs → Hostname → Hostname → (ErrTs,Hostname)
+      checkWL' es h1 h2 = let (l1 :| d1) = h1 ⊣ dLabels
+                              (l2 :| d2) = h2 ⊣ dLabels
+                              errNm = [fmt|names are not a+wl: '%T' vs. '%T'|] h1 h2
+                              errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
+                           in if d1 ≡ d2
+                              then if toText l1 ≡ toText l2 ⊕ "-wl"
+                                   then (es,h2)
+                                   else if toText l2 ≡ toText l1 ⊕ "-wl"
+                                        then (es,h1)
+                                        else (es ⊕ errT errNm,h1)
+                              else (es ⊕ errT errDm,h1)
       -- check that ip4, hostnames is a pair of hostnames where one
       -- is the other + "-wl"; return the base name
-      checkWL ∷ IP4 → NonEmptyHashSet Hostname → Hostname
-      checkWL i hh = let errTooMany l = [fmt|too many hosts for IP %T (%L)|] i l
-                      in case toNEList hh of
-                           h  :| []   → h
-                           h1 :| [h2] → checkWL' h1 h2
-                           lh         → __error__ $ errTooMany lh
+      checkWL ∷ ErrTs → IP4 → NonEmptyHashSet Hostname → (ErrTs, Hostname)
+      checkWL es i hh = let errTooMany l = [fmt|too many hosts for IP %T (%L)|] i l
+                         in case toNEList hh of
+                              h  :| []     → (es,h)
+                              h1 :| [h2]   → checkWL' es h1 h2
+                              lh@(h1 :| _) → (es ⊕ errT (errTooMany lh), h1)
       -- check that the map ip4 -> hostnames has only pairs of hostnames where one
       -- is the other + "-wl"; return the base name in each case
-      filterWL ∷ Map IP4 (NonEmptyHashSet Hostname) → Map IP4 Hostname
-      filterWL = mapWithKey checkWL
-  let hostList'' ∷ [(Hostname,IP4)]
-      hostList'' = (swap ⊳ toList hostsByIP) ⊕ (swap ⊳ toList (filterWL dupIPHosts))
-  forM_ ((\ h → addHostCmd fn1 fn2 (fst h) (snd h)) ⊳ sortOn snd hostList'')
+      filterWL ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
+               → (Map.Map IP4 Hostname, ErrTs)
+      filterWL = swap ∘ mapAccumWithKey checkWL ф
+  let hostList ∷ [(Hostname,IP4)]
+      es         ∷ ErrTs
+      (hostList,es) = let (filteredDups,es') = filterWL dupIPHosts
+                          hostList' = ю [ swap ⊳ Map.toList hostsByIP
+                                        , swap ⊳ Map.toList filteredDups ]
+                       in (hostList', es')
+  forM_ (toTexts es) $ putStrLn ∘ ("!ERROR: " ⊕) 
+  forM_ ((\ h → addHostCmd fn1 fn2 (fst h) (snd h)) ⊳ sortOn snd hostList)
         (mapM_ __runProc__)
 
   case forM (unLHMap $ hs ⊣ aliases) ( \ h → maybeE h (lookupHost hs h) ) of
@@ -359,7 +385,6 @@ __mkData'__ hs fn1 fn2 = do
   case forM (( \ h → (h,lookupHost hs h)) ⊳ hs ⊣ mail_servers ) (uncurry maybeE)  of
     Left  h → die (ExitFailure 3) h
     Right as → mapM_ __runProc__ $ addMxCmd fn1 fn2 ⊳ as
-
 
   Data.Text.IO.readFile (toString fn1) ≫ putStrLn
 
@@ -372,23 +397,19 @@ __withTemps__ io = let pfx1 = Just [pc|tinydns-data-|]
                        Left e → die (ExitFailure 4) e
                        Right r → return r
 
-__with2Temps__ ∷ MonadIO μ ⇒ (AbsFile → AbsFile → IO α) → μ α
-__with2Temps__ io = do
+__with2Temps__ ∷ MonadIO μ ⇒ Bool → (AbsFile → AbsFile → IO α) → μ α
+__with2Temps__ cl io = do
 -- BEWARE THE LAZY IO!
 -- REWRITE TEMP TO AVOID ALL SYSTEM.IO io (that is, lazy io)
-{-
-  (tmpfn1, h1) ← liftIO $ mkstemps "tinydns-data-" ""
-  (tmpfn2, h2) ← liftIO $ mkstemps "tinydns-data-" ".tmp"
-  liftIO $ hClose h1
-  liftIO $ hClose h2
-  splitMError (asIOError $ io tmpfn1 tmpfn2) ≫ \ case
-    Left e → die (ExitFailure 4) e
-    Right r → return r
--}
   (tmpfn1, h1) ← liftIO $ mkstemps "/tmp/tinydns-data-" ""
   (tmpfn2, h2) ← liftIO $ mkstemps "/tmp/tinydns-data-" ".tmp"
+  let tmp1 = parseAbsFile_ tmpfn1
+      tmp2 = parseAbsFile_ tmpfn2
   liftIO $ hClose h1
   liftIO $ hClose h2
-  liftIO $ io (parseAbsFile_ tmpfn1) (parseAbsFile_ tmpfn2)
+  r ← liftIO $ io tmp1 tmp2
+  liftIO $ when cl $ unlink_ tmp1 -- ⪼ unlink_ tmp2 -- tmp2 is auto-deleted
+                                                        -- by tinydns-data
+  return r
 
 -- that's all, folks! ----------------------------------------------------------

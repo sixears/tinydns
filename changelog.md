@@ -1,3 +1,7 @@
+0.1.0.4 2019-06-01
+==================
+- make failures such as IP dups into printed errors that do not prevent continuation
+
 0.1.0.3 2019-05-29
 ==================
 - where two "hosts" share an IP, and share a name but for a "-wl"; take the base name
