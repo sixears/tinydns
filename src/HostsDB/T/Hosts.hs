@@ -66,7 +66,7 @@ import qualified  Data.HashMap.Strict  as  HashMap
 
 import HostsDB.Host          ( Host( Host ) )
 import HostsDB.Hosts         ( Hosts( Hosts )
-                             , aliases, dns_servers, mail_servers, hosts )
+                             , aliases, dnsServers, mailServers, hosts )
 import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ) )
 
@@ -135,12 +135,12 @@ dhallTests' hs =
   testGroup "dhallTests" $ assertListEqIO "aliases"
                                               (otoList $ hostsTestHosts ⊣ aliases)
                                               (otoList ∘ view aliases ⊳ hs)
-                         ⊕ assertListEqIO "dns_servers"
-                                              (hostsTestHosts ⊣ dns_servers)
-                                              (view dns_servers ⊳ hs)
-                         ⊕ assertListEqIO "mail_servers"
-                                              (hostsTestHosts ⊣ mail_servers)
-                                              (view mail_servers ⊳ hs)
+                         ⊕ assertListEqIO "dnsServers"
+                                              (hostsTestHosts ⊣ dnsServers)
+                                              (view dnsServers ⊳ hs)
+                         ⊕ assertListEqIO "mailServers"
+                                              (hostsTestHosts ⊣ mailServers)
+                                              (view mailServers ⊳ hs)
                          ⊕ assertListEqIO "hosts"
                                               (otoList $ hostsTestHosts ⊣ hosts)
                                               (otoList ∘ view hosts ⊳ hs)

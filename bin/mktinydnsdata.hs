@@ -1,38 +1,43 @@
 {-# OPTIONS_GHC -Wall #-}
 
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE QuasiQuotes         #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE UnicodeSyntax       #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE QuasiQuotes           #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE UnicodeSyntax         #-}
 
 -- !!! Cleanup Temp Files !!!
 -- !!! REWRITE Fluffy.TempFile TO NOT USE LAZY IO !!!
 
-import Prelude ( error )
+import Prelude ( error, undefined )
 
 -- base --------------------------------
 
-import Control.Monad        ( forM_, forM, mapM, mapM_, return, when )
-import Data.Bifunctor       ( first )
-import Data.Bool            ( Bool )
-import Data.Either          ( Either( Left, Right ), either, partitionEithers )
-import Data.Eq              ( Eq )
-import Data.Foldable        ( Foldable, toList )
-import Data.Function        ( ($), (&), id )
-import Data.Functor         ( fmap )
-import Data.List            ( sortOn )
-import Data.List.NonEmpty   ( NonEmpty( (:|) ) )
-import Data.Maybe           ( Maybe( Just ) )
-import Data.Monoid          ( Monoid( mconcat, mempty ) )
-import Data.Semigroup       ( Semigroup( (<>) ) )
-import Data.String          ( String )
-import Data.Tuple           ( fst, snd, swap, uncurry )
-import System.Exit          ( ExitCode( ExitFailure ) )
-import System.IO            ( Handle, IO, hClose )
-import Text.Show            ( Show( show ) )
+import Control.Exception   ( Exception )
+import Control.Monad       ( Monad, forM_, forM, mapM, mapM_, return, when )
+import Data.Bifunctor      ( first )
+import Data.Bool           ( Bool )
+import Data.Either         ( Either( Left, Right ), either, partitionEithers )
+import Data.Eq             ( Eq )
+import Data.Foldable       ( Foldable, toList )
+import Data.Function       ( ($), (&), id )
+import Data.Functor        ( Functor, fmap )
+import Data.List           ( sortOn )
+import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
+import Data.Maybe          ( Maybe( Just ) )
+import Data.Monoid         ( Monoid( mconcat, mempty ) )
+import Data.Semigroup      ( Semigroup( (<>) ) )
+import Data.String         ( String )
+import Data.Tuple          ( fst, snd, swap, uncurry )
+import System.Exit         ( ExitCode( ExitFailure ) )
+import System.IO           ( Handle, IO, hClose )
+import Text.Show           ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
@@ -51,7 +56,7 @@ import Data.Map  ( mapAccumWithKey )
 
 -- data-textual ------------------------
 
-import Data.Textual  ( toString, toText )
+import Data.Textual  ( Printable( print ), toString, toText )
 
 -- dhall -------------------------------
 
@@ -71,6 +76,8 @@ import DomainNames.Hostname              ( Hostname, Localname
 
 import Fluffy.Containers.NonEmptyHashSet
                              ( NonEmptyHashSet, toNEList )
+import Fluffy.Functor        ( (<$$>) )
+import Fluffy.IO.Error       ( AsIOError( _IOError ) )
 import Fluffy.IP4            ( IP4, ip4 )
 import Fluffy.MACAddress     ( mac )
 import Fluffy.MapUtils       ( fromListWithDups )
@@ -78,6 +85,7 @@ import Fluffy.Maybe          ( maybeE )
 import Fluffy.MonadError     ( splitMError )
 import Fluffy.MonadIO        ( MonadIO, die, dieUsage, liftIO, unlink_ )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
+import Fluffy.Nat            ( One )
 import Fluffy.Options        ( optParser )
 import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseAbsFile_, parseFile' )
@@ -85,29 +93,35 @@ import Fluffy.TempFile       ( pc, with2TempFiles' )
 
 -- hostsdb -----------------------------
 
-import HostsDB.Host          ( Host( Host ), hname, ipv4 )
-import HostsDB.Hosts         ( Hosts( Hosts ), aliases, dns_servers, domain
-                             , hostIPv4', hostIPv4s, lookupHost
-                             , mail_servers
-                             )
-import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
-import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ), unLHMap )
+import HostsDB.Error.HostsError  ( AsHostsError, HostsError
+                                 , HostsDomainExecCreateError
+                                 , HostsExecCreateError, HostsExecCreateIOError
+                                 )
+import HostsDB.Host              ( Host( Host ), hname, ipv4 )
+import HostsDB.Hosts             ( Hosts( Hosts ), aliases, aliasHosts
+                                 , dnsServers, domain, hostIPv4, hostIPv4'
+                                 , hostIPv4s, lookupHost, mailServers
+                                 )
+import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
+import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ), unLHMap )
 
 -- lens --------------------------------
 
 import Control.Lens.Lens     ( Lens', lens )
+import Control.Lens.Prism    ( Prism', prism )
 import System.FilePath.Lens  ( directory )
 
 -- more-unicode ------------------------
 
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
-import Data.MoreUnicode.Monad        ( (≫) )
+import Data.MoreUnicode.Monad        ( (≫), (⋙) )
 import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
 
-import Control.Monad.Except  ( MonadError )
+import Control.Monad.Except  ( ExceptT, MonadError )
+import Control.Monad.Trans   ( lift )
 
 -- optparse-applicative ----------------
 
@@ -118,7 +132,7 @@ import Options.Applicative.Builder  ( ReadM, argument, eitherReader, flag, help
 
 -- path --------------------------------
 
-import Path  ( File, Path, (</>), toFilePath )
+import Path  ( File, Path, (</>), absfile, toFilePath )
 
 -- proclib -----------------------------
 
@@ -126,11 +140,13 @@ import ProcLib.CommonOpt.DryRun       ( DryRun, HasDryRunLevel( dryRunLevel )
                                       , dryRunOn, dryRunP )
 import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel( verboseLevel ), Verbose
                                       , verboseOn, verboseP )
-import ProcLib.Error.CreateProcError  ( AsCreateProcError )
-import ProcLib.Error.ExecError        ( AsExecError )
-import ProcLib.Error.ExecCreateError  ( ExecCreateError )
-import ProcLib.Process                ( mkProc_, runProcIO )
+import ProcLib.Error.CreateProcError  ( AsCreateProcError( _CreateProcError ) )
+import ProcLib.Error.ExecError        ( AsExecError( _ExecError ) )
+import ProcLib.Error.ExecCreateError  ( ExecCreateError, ExecCreateIOError
+                                      , _ECICreateE, _ECIExecE, _ECIIOE )
+import ProcLib.Process                ( mkProc_, runProcIO, system )
 import ProcLib.Types.CmdSpec          ( CmdSpec( CmdSpec ) )
+import ProcLib.Types.ProcIO           ( ProcIO, ProcIO' )
 import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 
 -- text --------------------------------
@@ -139,6 +155,10 @@ import qualified  Data.Text.IO
 
 import Data.Text     ( Text, pack, unlines )
 import Data.Text.IO  ( putStrLn )
+
+-- text-printer ------------------------
+
+import qualified  Text.Printer  as  P
 
 -- tfmt --------------------------------
 
@@ -178,6 +198,24 @@ data Options = Options { _dryRun   ∷ DryRun
                        , _clean    ∷ Clean
                        , _testMode ∷ TestMode
                        }
+{- | just for ghci testing -}
+_defaultOptions ∷ Options
+_defaultOptions =
+  Options dryRunOn verboseOn
+          [absfile|/home/martyn/rc/nixos/hostcfg/sixears-hosts.dhall|]
+          Clean TestMode
+
+dryRun ∷ Lens' Options DryRun
+dryRun = lens _dryRun (\ o d → o { _dryRun = d })
+
+instance HasDryRunLevel One Options where
+  dryRunLevel = dryRun
+
+verbose ∷ Lens' Options Verbose
+verbose = lens _verbose (\ o v → o { _verbose = v })
+
+instance HasVerboseLevel One Options where
+  verboseLevel = verbose
 
 input ∷ Lens' Options AbsFile
 input = lens _input (\ o i → o { _input = i })
@@ -262,10 +300,10 @@ testHosts =
                            "descn" ["comment"] (Just [mac|0A:89:67:45:23:01|])
       hosts         = LHostMap $ HashMap.fromList [ (lfoo,foohost)
                                                   , (lfoowl,foowlhost)]
-      dns_servers_  = [lfoo]
-      mail_servers_ = [lfoo]
+      dnsServers_  = [lfoo]
+      mailServers_ = [lfoo]
       aliases_      = LocalnameMap $ HashMap.fromList [(lbaz,lfoo)]
-   in Hosts dmn hosts dns_servers_ mail_servers_ aliases_
+   in Hosts dmn hosts dnsServers_ mailServers_ aliases_
 
 main ∷ IO ()
 main = do
@@ -283,7 +321,9 @@ main = do
                               _        → dieUsage badExt
 
 
-  __with2Temps__ (opts ⊣ clean ≡ NoClean) $ __mkData__ hs
+  (tinydnsdata,es) ← __with2Temps__ (opts ⊣ clean) $ \ fn1 fn2 → (system @_ @Options @_ @HostsDomainExecCreateError opts (__mkData''__ hs fn1 fn2))
+  putStrLn tinydnsdata
+  forM_ (toTexts es) $ putStrLn ∘ ("!ERROR: " ⊕)
 
 ----------------------------------------
 
@@ -330,12 +370,30 @@ instance Monoid ErrTs where
 ю ∷ (Foldable φ, Monoid α) ⇒ φ α → α
 ю = mconcat ∘ toList
 
-__mkData__ ∷ Hosts → AbsFile → AbsFile → IO ()
-__mkData__ hs fn1 fn2 = do
-  case partitionEithers $ hostIPv4' hs ⊳ hs ⊣ dns_servers of
-    ([], ips) → forM_ ips $ \ ip → forM_ (addNSCmd fn1 fn2 ip) __runProc__
+(⧐) ∷ Functor φ ⇒ (β → γ) → (α → φ β) → α → φ γ
+(⧐) = (<$$>)
 
-    (es, _)   → die (ExitFailure 3) (unlines es)
+
+system' ∷ Options → ProcIO' ExecCreateError (ExceptT ExecCreateError IO) () → IO ()
+system' = system @_ @Options @_ @ExecCreateError @_ @()
+
+mkAliasCmd ∷ (AsExecError ε, AsCreateProcError ε) ⇒
+             AbsFile → AbsFile → Host → Hostname → ProcIO ε η ()
+mkAliasCmd fn1 fn2 h a = mkProc_ $ addAliasCmd fn1 fn2 h a
+
+mkMxCmd ∷ (AsExecError ε, AsCreateProcError ε) ⇒
+          AbsFile → AbsFile → Host → ProcIO ε η ()
+mkMxCmd fn1 fn2 h = mkProc_ $ addMxCmd fn1 fn2 h
+
+__mkData''__ ∷ (AsCreateProcError ε, AsExecError ε, AsHostsError ε, AsDomainError ε, MonadError ε μ, MonadIO μ) ⇒ Hosts → AbsFile → AbsFile → ProcIO' ε μ (Text,ErrTs)
+__mkData''__ hs fn1 fn2 = do
+  es ← __mkData'__ hs fn1 fn2
+  tinydnsdata ← lift ∘ liftIO $ Data.Text.IO.readFile (toString fn1)
+  return (tinydnsdata, es)
+
+__mkData'__ ∷ (AsCreateProcError ε, AsExecError ε, AsHostsError ε, AsDomainError ε, MonadError ε η) ⇒ Hosts → AbsFile → AbsFile → ProcIO' ε η ErrTs
+__mkData'__ hs fn1 fn2 = do
+  ips ← lift $ mapM (hostIPv4 hs) (hs ⊣ dnsServers)
 
   let dupIPHosts ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
       hostsByIP  ∷ Map.Map IP4 Hostname
@@ -368,25 +426,22 @@ __mkData__ hs fn1 fn2 = do
       filterWL ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
                → (Map.Map IP4 Hostname, ErrTs)
       filterWL = swap ∘ mapAccumWithKey checkWL ф
-  let hostList ∷ [(Hostname,IP4)]
+      hostList ∷ [(Hostname,IP4)]
       es         ∷ ErrTs
       (hostList,es) = let (filteredDups,es') = filterWL dupIPHosts
                           hostList' = ю [ swap ⊳ Map.toList hostsByIP
                                         , swap ⊳ Map.toList filteredDups ]
                        in (hostList', es')
-  forM_ (toTexts es) $ putStrLn ∘ ("!ERROR: " ⊕) 
-  forM_ ((\ h → addHostCmd fn1 fn2 (fst h) (snd h)) ⊳ sortOn snd hostList)
-        (mapM_ __runProc__)
 
-  case forM (unLHMap $ hs ⊣ aliases) ( \ h → maybeE h (lookupHost hs h) ) of
-    Left  h  → die (ExitFailure 3) h
-    Right as → addAliasCmds'' fn1 fn2 (hs ⊣ domain) as
+  forM_ ips $ \ ip → mapM_ (mkProc_ @_ @()) (addNSCmd fn1 fn2 ip)
 
-  case forM (( \ h → (h,lookupHost hs h)) ⊳ hs ⊣ mail_servers ) (uncurry maybeE)  of
-    Left  h → die (ExitFailure 3) h
-    Right as → mapM_ __runProc__ $ addMxCmd fn1 fn2 ⊳ as
-
-  Data.Text.IO.readFile (toString fn1) ≫ putStrLn
+  mapM_ (mkProc_ @_ @()) $ ю (uncurry (addHostCmd fn1 fn2) ⊳ sortOn snd hostList)
+  let d = hs ⊣ domain
+  as ← lift (HashMap.toList ⊳ aliasHosts hs)
+  forM_ as (\ (l,h) → lift (l <..> d) ≫ \ a -> mkAliasCmd fn1 fn2 h a)
+  
+  forM_ (hs ⊣ mailServers) (\ a → lift (lookupHost hs a) ≫ mkMxCmd fn1 fn2)
+  return es
 
 ----------------------------------------
 
@@ -397,7 +452,7 @@ __withTemps__ io = let pfx1 = Just [pc|tinydns-data-|]
                        Left e → die (ExitFailure 4) e
                        Right r → return r
 
-__with2Temps__ ∷ MonadIO μ ⇒ Bool → (AbsFile → AbsFile → IO α) → μ α
+__with2Temps__ ∷ MonadIO μ ⇒ Clean → (AbsFile → AbsFile → IO α) → μ α
 __with2Temps__ cl io = do
 -- BEWARE THE LAZY IO!
 -- REWRITE TEMP TO AVOID ALL SYSTEM.IO io (that is, lazy io)
@@ -408,7 +463,7 @@ __with2Temps__ cl io = do
   liftIO $ hClose h1
   liftIO $ hClose h2
   r ← liftIO $ io tmp1 tmp2
-  liftIO $ when cl $ unlink_ tmp1 -- ⪼ unlink_ tmp2 -- tmp2 is auto-deleted
+  liftIO $ when (cl ≡ Clean) $ unlink_ tmp1 -- ⪼ unlink_ tmp2 -- tmp2 is auto-deleted
                                                         -- by tinydns-data
   return r
 

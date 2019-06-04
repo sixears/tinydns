@@ -1,11 +1,12 @@
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module HostsDB.Hosts
-  ( Hosts( Hosts ), aliases, dns_servers, domain, hosts, hostsHosts, hostIPv4
-  , hostIPv4', hostIPv4s, lookupHost, mail_servers )
+  ( Hosts( Hosts ), aliases, aliasHosts, dnsServers, domain, hosts, hostsHosts
+  , hostIPv4, hostIPv4', hostIPv4s, lookupHost, lookupHost', mailServers )
 where
 
 -- aeson -------------------------------
@@ -14,12 +15,12 @@ import Data.Aeson.Types  ( FromJSON )
 
 -- base --------------------------------
 
-import Data.Either    ( Either( Left, Right ) )
+import Control.Monad  ( return )
 import Data.Eq        ( Eq )
-import Data.Function  ( ($), flip )
+import Data.Function  ( ($) )
 import Data.Functor   ( fmap )
 import Data.List      ( intercalate )
-import Data.Maybe     ( Maybe, maybe )
+import Data.Maybe     ( maybe )
 import GHC.Generics   ( Generic )
 import Text.Show      ( Show( show ) )
 
@@ -27,10 +28,6 @@ import Text.Show      ( Show( show ) )
 
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
-
--- data-textual ------------------------
-
-import Data.Textual  ( toText )
 
 -- dhall -------------------------------
 
@@ -47,38 +44,41 @@ import DomainNames.Hostname  ( Hostname, Localname )
 import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Functor      ( (⊳) )
 import Fluffy.IP4          ( IP4 )
+import Fluffy.MonadError   ( mapMError )
 
 -- lens --------------------------------
 
 import Control.Lens.Getter  ( view )
 import Control.Lens.Lens    ( Lens', lens )
 
+-- mtl ---------------------------------
+
+import Control.Monad.Except  ( MonadError )
+
 -- more-unicode ------------------------
 
 import Data.MoreUnicode.Lens  ( (⊣) )
 
--- text --------------------------------
-
-import Data.Text  ( Text )
-
 -- unordered-containers ----------------
 
-import qualified  Data.HashMap.Strict  as  HashMap
+import Data.HashMap.Strict  ( HashMap, lookup, traverseWithKey )
 
 ------------------------------------------------------------
 --                     local imports                      --
 ------------------------------------------------------------
 
-import HostsDB.Host          ( Host, hname, ipv4 )
-import HostsDB.LHostMap      ( LHostMap, lhmHosts, unLHostMap )
-import HostsDB.LocalnameMap  ( LocalnameMap )
+import HostsDB.Error.HostsError  ( AsHostsError, HostsError
+                                 , aliasNotFound, localnameNotFound )
+import HostsDB.Host              ( Host, hname, ipv4 )
+import HostsDB.LHostMap          ( LHostMap, lhmHosts, unLHostMap )
+import HostsDB.LocalnameMap      ( LocalnameMap, unLHMap )
 
 --------------------------------------------------------------------------------
 
 data Hosts = Hosts { _domain       ∷ FQDN
                    , _hosts        ∷ LHostMap
-                   , _dns_servers  ∷ [Localname]
-                   , _mail_servers ∷ [Localname]
+                   , _dnsServers  ∷ [Localname]
+                   , _mailServers ∷ [Localname]
                    , _aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
@@ -89,11 +89,11 @@ domain       = lens _domain (\ hs d → hs { _domain = d })
 hosts        ∷ Lens' Hosts LHostMap
 hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
 
-dns_servers  ∷ Lens' Hosts [Localname]
-dns_servers  = lens _dns_servers (\ hs ds → hs { _dns_servers = ds })
+dnsServers  ∷ Lens' Hosts [Localname]
+dnsServers  = lens _dnsServers (\ hs ds → hs { _dnsServers = ds })
 
-mail_servers ∷ Lens' Hosts [Localname]
-mail_servers = lens _mail_servers (\ hs ms → hs { _mail_servers = ms })
+mailServers ∷ Lens' Hosts [Localname]
+mailServers = lens _mailServers (\ hs ms → hs { _mailServers = ms })
 
 aliases       ∷ Lens' Hosts LocalnameMap
 aliases       = lens _aliases (\ hs as → hs { _aliases = as })
@@ -109,27 +109,35 @@ instance Interpret Hosts where
   autoWith _ = hostsType
 
 instance Show Hosts where
-  show h = intercalate "\n" [ "HOSTS:        " ⊕ show (h ⊣ hosts)
-                            , "DNS_SERVERS:  " ⊕ show (h ⊣ dns_servers)
-                            , "MAIL_SERVERS: " ⊕ show (h ⊣ mail_servers)
-                            , "ALIASES:      " ⊕ show (h ⊣ aliases)
+  show h = intercalate "\n" [ "HOSTS:       " ⊕ show (h ⊣ hosts)
+                            , "DNSSERVERS:  " ⊕ show (h ⊣ dnsServers)
+                            , "MAILSERVERS: " ⊕ show (h ⊣ mailServers)
+                            , "ALIASES:     " ⊕ show (h ⊣ aliases)
                             ]
 
-lookupHost ∷ Hosts → Localname → Maybe Host
-lookupHost = flip HashMap.lookup ∘ unLHostMap ∘ view hosts
+lookupHost ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → Localname → η Host
+lookupHost hs l = let hs' = unLHostMap $ view hosts hs
+                   in maybe (localnameNotFound l) return $ lookup l hs'
 
-hostIPv4 ∷ Hosts → Localname → Maybe IP4
+lookupHost' ∷ MonadError HostsError η ⇒ Hosts → Localname → η Host
+lookupHost' = lookupHost
+
+hostIPv4 ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → Localname → η IP4
 hostIPv4 hs h = view ipv4 ⊳ lookupHost hs h
 
-hostIPv4' ∷ Hosts → Localname → Either Text IP4
-hostIPv4' hs h = let quote t = "'" ⊕ toText t ⊕ "'"
-                     noSuchH = "hostIPv4': no such host " ⊕ quote h
-                 in maybe (Left noSuchH) Right $ hostIPv4 hs h
+hostIPv4' ∷ MonadError HostsError η ⇒ Hosts → Localname → η IP4
+hostIPv4' = hostIPv4
 
 hostsHosts ∷ Hosts → [Host]
 hostsHosts = lhmHosts ∘ view hosts
 
 hostIPv4s ∷ Hosts → [(Hostname,IP4)]
 hostIPv4s = fmap ( \ h → (h ⊣ hname, h ⊣ ipv4) ) ∘ hostsHosts
+
+{- | a map from local alias names to the underlying host (if any) -}
+aliasHosts ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → η (HashMap Localname Host)
+aliasHosts hs =
+  traverseWithKey (\ l a → mapMError (aliasNotFound l) $ lookupHost hs a)
+                  (unLHMap (view aliases hs))
 
 -- that's all, folks! ----------------------------------------------------------
