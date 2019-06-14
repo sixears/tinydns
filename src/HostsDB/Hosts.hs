@@ -5,8 +5,11 @@
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module HostsDB.Hosts
-  ( Hosts( Hosts ), aliases, aliasHosts, dnsServers, domain, hosts, hostsHosts
-  , hostIPv4, hostIPv4', hostIPv4s, lookupHost, lookupHost', mailServers )
+  ( Domains( Domains ), Hosts( Hosts )
+  , aliases, aliasHosts, dnsServers, domains, hosts, hostsHosts
+  , hostIPv4, hostIPv4', hostIPv4s, inAddr, lookupHost, lookupHost', mailServers
+  , subDomain
+  )
 where
 
 -- aeson -------------------------------
@@ -75,16 +78,34 @@ import HostsDB.LocalnameMap      ( LocalnameMap, unLHMap )
 
 --------------------------------------------------------------------------------
 
-data Hosts = Hosts { _domain       ∷ FQDN
+class HasSubDomain α where
+  subDomain ∷ Lens' α FQDN
+
+class HasINAddr α where
+  inAddr ∷ Lens' α FQDN
+
+data Domains = Domains { _subDomain ∷ FQDN, _inAddr ∷ FQDN }
+  deriving (Eq, FromJSON, Generic, Show)
+
+instance HasSubDomain Domains where
+  subDomain = lens _subDomain (\ d s → d { _subDomain = s })
+
+instance HasINAddr Domains where
+  inAddr = lens _inAddr (\ d i → d { _inAddr = i })
+
+instance Interpret Domains where
+  autoWith _ = record $ Domains ⊳ field "sub_domain" auto ⊵ field "in_addr" auto
+
+data Hosts = Hosts { _domains      ∷ Domains
                    , _hosts        ∷ LHostMap
-                   , _dnsServers  ∷ [Localname]
-                   , _mailServers ∷ [Localname]
+                   , _dnsServers   ∷ [Localname]
+                   , _mailServers  ∷ [Localname]
                    , _aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
 
-domain       ∷ Lens' Hosts FQDN
-domain       = lens _domain (\ hs d → hs { _domain = d })
+domains      ∷ Lens' Hosts Domains
+domains      = lens _domains (\ hs d → hs { _domains = d })
 
 hosts        ∷ Lens' Hosts LHostMap
 hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
@@ -99,11 +120,17 @@ aliases       ∷ Lens' Hosts LocalnameMap
 aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 
 hostsType ∷ Type Hosts
-hostsType = record $ Hosts ⊳ field "domain"       auto
+hostsType = record $ Hosts ⊳ field "domains"      auto
                            ⊵ field "hosts"        auto
                            ⊵ field "dns_servers"  (D.list auto)
                            ⊵ field "mail_servers" (D.list auto)
                            ⊵ field "aliases"      auto
+
+instance HasSubDomain Hosts where
+  subDomain = domains ∘ subDomain
+
+instance HasINAddr Hosts where
+  inAddr = domains ∘ inAddr
 
 instance Interpret Hosts where
   autoWith _ = hostsType

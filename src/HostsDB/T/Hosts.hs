@@ -46,11 +46,17 @@ import Data.MonoTraversable  ( otoList )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Lens  ( (⊣) )
+import Data.MoreUnicode.Lens   ( (⊣) )
+import Data.MoreUnicode.Monad  ( (≫) )
+import Data.MoreUnicode.Tasty  ( (≟) )
 
 -- tasty -------------------------------
 
 import Test.Tasty  ( TestTree, defaultMain, testGroup )
+
+-- tasty-hunit -------------------------
+
+import Test.Tasty.HUnit  ( testCase )
 
 -- text --------------------------------
 
@@ -65,8 +71,9 @@ import qualified  Data.HashMap.Strict  as  HashMap
 ------------------------------------------------------------
 
 import HostsDB.Host          ( Host( Host ) )
-import HostsDB.Hosts         ( Hosts( Hosts )
-                             , aliases, dnsServers, mailServers, hosts )
+import HostsDB.Hosts         ( Domains( Domains ), Hosts( Hosts ), aliases
+                             , dnsServers, hosts, inAddr, mailServers, subDomain
+                             )
 import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ) )
 
@@ -86,7 +93,7 @@ hostsTestHosts =
                                                , ([localname|chrome|], chrome)
                                                , ([localname|cargo|] , cargo)
                                                ]
-   in Hosts [fqdn|sixears.co.uk|]
+   in Hosts (Domains [fqdn|sixears.co.uk.|] [fqdn|0.168.192.in-addr.arpa.|])
             expHostMap 
             [ [localname|cargo|], [localname|chrome|] ]
             [ [localname|cargo|] ]
@@ -99,7 +106,8 @@ hostsTestHosts =
   
 hostsTestText ∷ Text
 hostsTestText =
-  unlines [ "{ domain  = \"sixears.co.uk.\""
+  unlines [ "{ domains = { sub_domain = \"sixears.co.uk.\""
+          , "            , in_addr    = \"0.168.192.in-addr.arpa.\" }"
           , ", aliases = [ { from = \"mailhost\", to = \"cargo\"}"
           , "            , { from = \"www\",      to = \"chrome\"}"
           , "            , { from = \"cvs\",      to = \"chrome\"}"
@@ -132,7 +140,14 @@ hostsTestText =
 
 dhallTests' ∷ IO Hosts → TestTree
 dhallTests' hs =
-  testGroup "dhallTests" $ assertListEqIO "aliases"
+  testGroup "dhallTests" $ [ testCase "sub-domain" $
+                               hs ≫ \hs' →   hostsTestHosts ⊣ subDomain
+                                           ≟ hs' ⊣ subDomain
+                           , testCase "in-addr" $
+                               hs ≫ \hs' →   hostsTestHosts ⊣ inAddr
+                                           ≟ hs' ⊣ inAddr
+                           ]
+                         ⊕ assertListEqIO "aliases"
                                               (otoList $ hostsTestHosts ⊣ aliases)
                                               (otoList ∘ view aliases ⊳ hs)
                          ⊕ assertListEqIO "dnsServers"

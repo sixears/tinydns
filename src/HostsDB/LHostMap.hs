@@ -134,7 +134,7 @@ instance FromJSON LHostMap where
           returnPair (leftFail $ parseLocalname' k, parseJSON v)
         go (k,invalid)      =
           typeMismatch (unpack $ "Host: '" ⊕ k ⊕ "'") invalid
-     in fromList ⊳ (mapM go $ HashMap.toList hm) ≫ \ case
+     in fromList ⊳ mapM go (HashMap.toList hm) ≫ \ case
           Left  dups → fail $ toString dups
           Right hm'  → return $ LHostMap hm'
   parseJSON invalid = typeMismatch "host map" invalid

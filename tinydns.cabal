@@ -61,6 +61,8 @@ library
                     , DomainNames.UQDN
                     , DomainNames.Error.UQDNError
 
+                    , Fluffy.Temp2
+
                     , HostsDB.Error.HostsError
                     , HostsDB.Host
                     , HostsDB.T.Host
@@ -70,7 +72,10 @@ library
                     , HostsDB.T.Hosts
                     , HostsDB.LocalnameMap
 
+                    , TinyDNS.Edit
                     , TinyDNS.Paths
+                    , TinyDNS.Types.Clean
+                    , TinyDNS.Types.TinyDNSData
 
   -- modules included in this library but not exported.
   other-modules:    
@@ -83,7 +88,7 @@ library
   build-depends:      aeson, base, base-unicode-symbols, data-textual, dhall
                     , hashable, lens, mono-traversable, more-unicode, mtl
                     , path, tasty, tasty-hunit, template-haskell, text
-                    , text-printer, unordered-containers, yaml
+                    , text-printer, unix, unordered-containers, yaml
 
                     , fluffy >= 0.2.8.0, proclib >= 3.1.1.1, tfmt
 
@@ -104,8 +109,7 @@ executable mktinydnsdata
   hs-source-dirs:      bin
   build-depends:       base, base-unicode-symbols, bytestring, containers
                      , data-textual, dhall, lens, mtl, optparse-applicative
-                     , path, split, text, text-printer, unix
-                     , unordered-containers, yaml
+                     , path, split, text, unordered-containers, yaml
 
                      , fluffy >= 0.2.8.0, more-unicode >= 0.0.4.0
                      , proclib >= 3.1.1.0, tfmt >= 0.2.1.0
