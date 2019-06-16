@@ -285,7 +285,7 @@ main = do
                               _        → dieUsage badExt
 
 
-  (t,es') ← exceptIOThrow ∘ flip runReaderT (RuntimeContext (opts ⊣ clean) hs) $ doProcIO @_ @_ @_ @_ @HostsDomainExecCreateIOError opts (mkData hs)
+  (t,es') ← exceptIOThrow ∘ flip runReaderT (RuntimeContext (opts ⊣ clean) hs) $ doProcIO @_ @_ @_ @_ @HostsDomainExecCreateIOError opts mkData
   putStrLn (toText t)
   forM_ (toTexts es') $ putStrLn ∘ ("!ERROR: " ⊕)
 
@@ -330,9 +330,10 @@ mkData ∷ (AsHostsError ε, AsExecError ε, AsCreateProcError ε,
           AsDomainError ε, AsIOError ε,
           MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
 
-         Hosts → ProcIO ε μ (TinyDNSData, ErrTs)
+         ProcIO ε μ (TinyDNSData, ErrTs)
 
-mkData hs = do
+mkData = do
+  hs ← lift $ asks (view hosts)
   let (hostList,es) = hostIPs hs
 
   tinydnsdata ← mkNSCmds ф ≫ addHosts hostList ≫ mkAliasCmds ≫ mkMxCmds
