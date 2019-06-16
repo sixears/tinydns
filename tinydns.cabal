@@ -76,6 +76,7 @@ library
                     , HostsDB.LocalnameMap
 
                     , TinyDNS.Edit
+                    , TinyDNS.Hosts
                     , TinyDNS.Paths
                     , TinyDNS.Types.Clean
                     , TinyDNS.Types.TinyDNSData

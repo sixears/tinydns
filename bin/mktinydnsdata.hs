@@ -7,9 +7,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE QuasiQuotes           #-}
-{-# LANGUAGE Rank2Types            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TupleSections         #-}
+-- {-# LANGUAGE Rank2Types            #-}
+-- {-# LANGUAGE ScopedTypeVariables   #-}
+-- {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE UnicodeSyntax         #-}
 
@@ -20,7 +20,7 @@ import Prelude ( error )
 
 -- base --------------------------------
 
-import Control.Monad   ( foldM, forM, forM_, mapM, return )
+import Control.Monad   ( forM_, return )
 import Data.Bifunctor  ( first )
 import Data.Either     ( Either, either )
 import Data.Eq         ( Eq )
@@ -51,14 +51,12 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 -- domainnames -------------------------
 
-import DomainNames.Error.DomainError     ( AsDomainError )
 import DomainNames.FQDN                  ( fqdn )
-import DomainNames.Hostname              ( (<..>), hostname, localname )
+import DomainNames.Hostname              ( hostname, localname )
 
 -- fluffy ------------------------------
 
-import Fluffy.ErrTs          ( ErrTs, toTexts )
-import Fluffy.IO.Error       ( AsIOError )
+import Fluffy.ErrTs          ( toTexts )
 import Fluffy.IP4            ( ip4 )
 import Fluffy.MACAddress     ( mac )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO )
@@ -70,19 +68,15 @@ import Fluffy.Path           ( AbsDir, AbsFile, RelFile
 
 -- hostsdb -----------------------------
 
-import HostsDB.Error.HostsError  ( AsHostsError, HostsDomainExecCreateIOError )
-import HostsDB.Host              ( Host( Host ), hname, ipv4 )
-import HostsDB.Hosts             ( Domains( Domains ), Hosts( Hosts )
-                                 , aliasHosts, dnsServers, hostIPs, hostIPv4
-                                 , inAddr, lookupHost, mailServers
-                                 , subDomain
-                                 )
+import HostsDB.Error.HostsError  ( HostsDomainExecCreateIOError )
+import HostsDB.Host              ( Host( Host ) )
+import HostsDB.Hosts             ( Domains( Domains ), HasHosts( hosts )
+                                 , Hosts( Hosts ) )
 import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ) )
 
 -- lens --------------------------------
 
-import Control.Lens.Getter   ( view )
 import Control.Lens.Lens     ( Lens', lens )
 import System.FilePath.Lens  ( directory )
 
@@ -91,13 +85,11 @@ import System.FilePath.Lens  ( directory )
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
 import Data.MoreUnicode.Monad        ( (≫) )
-import Data.MoreUnicode.Monoid2      ( ф )
 import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
 
-import Control.Monad.Reader  ( MonadReader, asks, runReaderT )
-import Control.Monad.Trans   ( lift )
+import Control.Monad.Reader  ( runReaderT )
 
 -- optparse-applicative ----------------
 
@@ -116,10 +108,7 @@ import ProcLib.CommonOpt.DryRun       ( DryRun, HasDryRunLevel( dryRunLevel )
                                       , dryRunOn, dryRunP )
 import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel( verboseLevel ), Verbose
                                       , verboseOn, verboseP )
-import ProcLib.Error.CreateProcError  ( AsCreateProcError )
-import ProcLib.Error.ExecError        ( AsExecError )
 import ProcLib.Process                ( doProcIO )
-import ProcLib.Types.ProcIO           ( ProcIO )
 
 -- text --------------------------------
 
@@ -144,9 +133,8 @@ import Data.Yaml  ( decodeEither' )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Edit               ( addAliases, addHosts, addMx, addNSen )
+import TinyDNS.Hosts              ( mkData )
 import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean, NoClean ) )
-import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
 
 --------------------------------------------------------------------------------
 
@@ -223,9 +211,6 @@ __loadFileDhall__ fn = liftIO $
 
 ----------------------------------------
 
-class HasHosts α where
-  hosts ∷ Lens' α Hosts
-
 testHosts ∷ Hosts
 testHosts =
   let lfoo          = [localname|foo|]
@@ -290,54 +275,5 @@ main = do
   forM_ (toTexts es') $ putStrLn ∘ ("!ERROR: " ⊕)
 
 ----------------------------------------
-
-mkNSCmds ∷ (AsCreateProcError ε, AsExecError ε, AsHostsError ε, AsIOError ε,
-            MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
-           TinyDNSData → ProcIO ε μ TinyDNSData
-mkNSCmds tinydnsdata = do
-  hs  ← lift (asks $ view hosts)
-  ips ← lift $ mapM (hostIPv4 hs) (hs ⊣ dnsServers)
-  addNSen [hs ⊣ subDomain, hs ⊣ inAddr] ips tinydnsdata
-
-----------------------------------------
-
-mkAliasCmds ∷ (AsCreateProcError ε, AsExecError ε,
-               AsDomainError ε, AsHostsError ε, AsIOError ε,
-               MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
-              TinyDNSData → ProcIO ε μ TinyDNSData
-mkAliasCmds t = do
-  hs ← lift (asks $ view hosts)
-  as ← lift (HashMap.toList ⊳ aliasHosts hs)
-  let aliasHostIP (l,h) = (,h ⊣ ipv4) ⊳ l <..> (hs ⊣ subDomain)
-  aliases ← lift $ forM as aliasHostIP
-  addAliases aliases t
-
-----------------------------------------
-
-mkMxCmds ∷ (AsExecError ε, AsCreateProcError ε, AsHostsError ε, AsIOError ε,
-            MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
-           TinyDNSData → ProcIO ε μ TinyDNSData
-
-mkMxCmds tinydnsdata = do
-  hs ← lift (asks $ view hosts)
-  let go t h = do mx ∷ Host ← lift $ lookupHost hs h
-                  addMx (mx ⊣ hname) (mx ⊣ ipv4) t
-  foldM (\ t h → go t h) tinydnsdata (hs ⊣ mailServers)
-
-----------------------------------------
-
-mkData ∷ (AsHostsError ε, AsExecError ε, AsCreateProcError ε,
-          AsDomainError ε, AsIOError ε,
-          MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
-
-         ProcIO ε μ (TinyDNSData, ErrTs)
-
-mkData = do
-  hs ← lift $ asks (view hosts)
-  let (hostList,es) = hostIPs hs
-
-  tinydnsdata ← mkNSCmds ф ≫ addHosts hostList ≫ mkAliasCmds ≫ mkMxCmds
-
-  return (tinydnsdata,es)
 
 -- that's all, folks! ----------------------------------------------------------

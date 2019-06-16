@@ -5,10 +5,10 @@
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module HostsDB.Hosts
-  ( Domains( Domains ), Hosts( Hosts )
+  ( Domains( Domains ), HasHosts( hosts ), Hosts( Hosts )
   , aliases, aliasHosts, dnsServers, domains, hosts, hostsHosts, hostIPs
-  , hostIPv4, hostIPv4', hostIPv4s, inAddr, lookupHost, lookupHost', mailServers
-  , subDomain
+  , hostIPv4, hostIPv4', hostIPv4s, inAddr, lhostmap, lookupHost, lookupHost'
+  , mailServers, subDomain
   )
 where
 
@@ -112,12 +112,15 @@ instance Interpret Domains where
 ------------------------------------------------------------
 
 data Hosts = Hosts { _domains      ∷ Domains
-                   , _hosts        ∷ LHostMap
+                   , _lhostmap     ∷ LHostMap
                    , _dnsServers   ∷ [Localname]
                    , _mailServers  ∷ [Localname]
                    , _aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
+
+class HasHosts α where
+  hosts ∷ Lens' α Hosts
 
 instance HasSubDomain Hosts where
   subDomain = domains ∘ subDomain
@@ -133,7 +136,7 @@ instance Interpret Hosts where
                               ⊵ field "aliases"      auto
 
 instance Show Hosts where
-  show h = intercalate "\n" [ "HOSTS:       " ⊕ show (h ⊣ hosts)
+  show h = intercalate "\n" [ "HOSTS:       " ⊕ show (h ⊣ lhostmap)
                             , "DNSSERVERS:  " ⊕ show (h ⊣ dnsServers)
                             , "MAILSERVERS: " ⊕ show (h ⊣ mailServers)
                             , "ALIASES:     " ⊕ show (h ⊣ aliases)
@@ -144,8 +147,8 @@ instance Show Hosts where
 domains      ∷ Lens' Hosts Domains
 domains      = lens _domains (\ hs d → hs { _domains = d })
 
-hosts        ∷ Lens' Hosts LHostMap
-hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
+lhostmap     ∷ Lens' Hosts LHostMap
+lhostmap     = lens _lhostmap (\ hs lhm → hs { _lhostmap = lhm })
 
 dnsServers  ∷ Lens' Hosts [Localname]
 dnsServers  = lens _dnsServers (\ hs ds → hs { _dnsServers = ds })
@@ -159,7 +162,7 @@ aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 ----------------------------------------
 
 lookupHost ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → Localname → η Host
-lookupHost hs l = let hs' = unLHostMap $ view hosts hs
+lookupHost hs l = let hs' = unLHostMap $ view lhostmap hs
                    in maybe (localnameNotFound l) return $ lookup l hs'
 
 --------------------
@@ -180,7 +183,7 @@ hostIPv4' = hostIPv4
 ----------------------------------------
 
 hostsHosts ∷ Hosts → [Host]
-hostsHosts = lhmHosts ∘ view hosts
+hostsHosts = lhmHosts ∘ view lhostmap
 
 ----------------------------------------
 

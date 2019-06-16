@@ -71,8 +71,9 @@ import qualified  Data.HashMap.Strict  as  HashMap
 ------------------------------------------------------------
 
 import HostsDB.Host          ( Host( Host ) )
-import HostsDB.Hosts         ( Domains( Domains ), Hosts( Hosts ), aliases
-                             , dnsServers, hosts, inAddr, mailServers, subDomain
+import HostsDB.Hosts         ( Domains( Domains ), Hosts( Hosts )
+                             , aliases, dnsServers, lhostmap, inAddr
+                             , mailServers, subDomain
                              )
 import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ) )
@@ -157,8 +158,8 @@ dhallTests' hs =
                                               (hostsTestHosts ⊣ mailServers)
                                               (view mailServers ⊳ hs)
                          ⊕ assertListEqIO "hosts"
-                                              (otoList $ hostsTestHosts ⊣ hosts)
-                                              (otoList ∘ view hosts ⊳ hs)
+                                           (otoList $ hostsTestHosts ⊣ lhostmap)
+                                           (otoList ∘ view lhostmap ⊳ hs)
 dhallTests ∷ TestTree
 dhallTests = withResource' (D.input auto hostsTestText) dhallTests'
 
