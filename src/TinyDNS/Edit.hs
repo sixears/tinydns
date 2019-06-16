@@ -6,10 +6,7 @@
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module TinyDNS.Edit
-  ( addAlias, addAliases, addHost, addHosts, addNS, addNSen
-
-  , tinydnsEdit
-  )
+  ( addAlias, addAliases, addHost, addHosts, addMx, addNS, addNSen )
 where
 
 -- base --------------------------------
@@ -151,10 +148,18 @@ addAlias ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
 addAlias name ip =
   tinydnsEdit [ "add", "alias", toText name, toText $ ip ]
 
+--------------------
+
 addAliases ∷ (Foldable ψ, AsCreateProcError ε, AsExecError ε, AsIOError ε,
               MonadIO μ, HasClean α, MonadReader α μ) ⇒
              ψ (Hostname,IP4) → TinyDNSData → ProcIO ε μ TinyDNSData
 addAliases as t = foldM (flip $ uncurry addAlias) t as
 
+----------------------------------------
+
+addMx ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+         MonadIO μ, HasClean α, MonadReader α μ) ⇒
+        Hostname → IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
+addMx hname ip = tinydnsEdit [ "add", "mx", toText hname, toText ip ]
 
 -- that's all, folks! ----------------------------------------------------------

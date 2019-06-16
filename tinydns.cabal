@@ -46,7 +46,9 @@ cabal-version:        >=1.10
 library
   ghc-options:        -W -Wall -fhelpful-errors
   -- Modules exported by the library.
-  exposed-modules:    DomainNames.Constants
+  exposed-modules:    Data.MoreUnicode.Monoid2
+
+                    , DomainNames.Constants
                     , DomainNames.Domain
                     , DomainNames.Error.ExecCreateDomainError
                     , DomainNames.Error.DomainError

@@ -25,12 +25,11 @@ import Control.Monad       ( foldM, forM, forM_, mapM, return )
 import Data.Bifunctor      ( first )
 import Data.Either         ( Either, either )
 import Data.Eq             ( Eq )
-import Data.Foldable       ( Foldable, toList )
 import Data.Function       ( ($), (&), flip, id )
 import Data.Functor        ( fmap )
 import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
 import Data.Maybe          ( Maybe( Just ) )
-import Data.Monoid         ( Monoid( mconcat, mempty ) )
+import Data.Monoid         ( Monoid( mempty ) )
 import Data.Semigroup      ( Semigroup( (<>) ) )
 import Data.String         ( String )
 import Data.Tuple          ( swap )
@@ -66,7 +65,7 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 import DomainNames.Domain                ( IsDomainLabels( dLabels ) )
 import DomainNames.Error.DomainError     ( AsDomainError )
 import DomainNames.FQDN                  ( fqdn )
-import DomainNames.Hostname              ( Hostname, Localname
+import DomainNames.Hostname              ( Hostname
                                          , (<..>), hostname, localname )
 
 -- fluffy ------------------------------
@@ -107,6 +106,7 @@ import System.FilePath.Lens  ( directory )
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
 import Data.MoreUnicode.Monad        ( (≫) )
+import Data.MoreUnicode.Monoid2      ( ф, ю )
 import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
@@ -163,8 +163,7 @@ import Data.Yaml  ( decodeEither' )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Edit               ( addAliases, addHosts, addNSen
-                                  , tinydnsEdit )
+import TinyDNS.Edit               ( addAliases, addHosts, addMx, addNSen )
 import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean, NoClean ) )
 import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
 
@@ -334,11 +333,6 @@ instance Semigroup ErrTs where
 instance Monoid ErrTs where
   mempty = ErrTs []
 
-ф ∷ Monoid α ⇒ α
-ф = mempty
-ю ∷ (Foldable φ, Monoid α) ⇒ φ α → α
-ю = mconcat ∘ toList
-
 -- given two hostnames; if one is the other+"-wl", then return the base
 -- name - else return the first name, and an error
 checkWL' ∷ Hostname → Hostname → (ErrTs,Hostname)
@@ -416,26 +410,15 @@ mkAliasCmds t = do
 
 ----------------------------------------
 
-addMx ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
-                MonadIO μ, HasClean α, MonadReader α μ) ⇒
-               Host → TinyDNSData → ProcIO ε μ TinyDNSData
-addMx mx =
-  tinydnsEdit [ "add", "mx", toText (mx ⊣ hname), toText (mx ⊣ ipv4) ]
-
-mkMxCmd ∷ (AsExecError ε, AsCreateProcError ε, AsHostsError ε, AsIOError ε,
-           HasClean α, MonadReader α μ, MonadIO μ) ⇒
-          Hosts → TinyDNSData → Localname → ProcIO ε μ TinyDNSData
-mkMxCmd hs t h = do
-  mx ∷ Host ← lift $ lookupHost hs h
-  addMx mx t
-
 mkMxCmds ∷ (AsExecError ε, AsCreateProcError ε, AsHostsError ε, AsIOError ε,
             MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
            TinyDNSData → ProcIO ε μ TinyDNSData
 
-mkMxCmds t = do
+mkMxCmds tinydnsdata = do
   hs ← lift (asks $ view hosts)
-  foldM (mkMxCmd hs) t (hs ⊣ mailServers)
+  let go t h = do mx ∷ Host ← lift $ lookupHost hs h
+                  addMx (mx ⊣ hname) (mx ⊣ ipv4) t
+  foldM (\ t h → go t h) tinydnsdata (hs ⊣ mailServers)
 
 ----------------------------------------
 
