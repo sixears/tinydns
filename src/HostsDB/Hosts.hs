@@ -6,7 +6,7 @@
 
 module HostsDB.Hosts
   ( Domains( Domains ), Hosts( Hosts )
-  , aliases, aliasHosts, dnsServers, domains, hosts, hostsHosts
+  , aliases, aliasHosts, dnsServers, domains, hosts, hostsHosts, hostIPs
   , hostIPv4, hostIPv4', hostIPv4s, inAddr, lookupHost, lookupHost', mailServers
   , subDomain
   )
@@ -24,6 +24,7 @@ import Data.Function  ( ($) )
 import Data.Functor   ( fmap )
 import Data.List      ( intercalate )
 import Data.Maybe     ( maybe )
+import Data.Tuple     ( swap )
 import GHC.Generics   ( Generic )
 import Text.Show      ( Show( show ) )
 
@@ -31,6 +32,10 @@ import Text.Show      ( Show( show ) )
 
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
+
+-- containers --------------------------
+
+import qualified  Data.Map  as  Map
 
 -- dhall -------------------------------
 
@@ -40,13 +45,17 @@ import Dhall  ( Interpret( autoWith ), auto, field, record )
 -- domainnames -------------------------
 
 import DomainNames.FQDN      ( FQDN )
-import DomainNames.Hostname  ( Hostname, Localname )
+import DomainNames.Hostname  ( Hostname, Localname, filterWL )
 
 -- fluffy ------------------------------
 
 import Fluffy.Applicative  ( (⊵) )
+import Fluffy.Containers.NonEmptyHashSet
+                           ( NonEmptyHashSet )
+import Fluffy.ErrTs        ( ErrTs )
 import Fluffy.Functor      ( (⊳) )
 import Fluffy.IP4          ( IP4 )
+import Fluffy.MapUtils     ( fromListWithDups )
 import Fluffy.MonadError   ( mapMError )
 
 -- lens --------------------------------
@@ -60,7 +69,8 @@ import Control.Monad.Except  ( MonadError )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Lens  ( (⊣) )
+import Data.MoreUnicode.Lens     ( (⊣) )
+import Data.MoreUnicode.Monoid2  ( ю )
 
 -- unordered-containers ----------------
 
@@ -84,6 +94,8 @@ class HasSubDomain α where
 class HasINAddr α where
   inAddr ∷ Lens' α FQDN
 
+------------------------------------------------------------
+
 data Domains = Domains { _subDomain ∷ FQDN, _inAddr ∷ FQDN }
   deriving (Eq, FromJSON, Generic, Show)
 
@@ -94,7 +106,10 @@ instance HasINAddr Domains where
   inAddr = lens _inAddr (\ d i → d { _inAddr = i })
 
 instance Interpret Domains where
-  autoWith _ = record $ Domains ⊳ field "sub_domain" auto ⊵ field "in_addr" auto
+  autoWith _ = record $ Domains ⊳ field "sub_domain" auto
+                                ⊵ field "in_addr" auto
+
+------------------------------------------------------------
 
 data Hosts = Hosts { _domains      ∷ Domains
                    , _hosts        ∷ LHostMap
@@ -103,21 +118,6 @@ data Hosts = Hosts { _domains      ∷ Domains
                    , _aliases      ∷ LocalnameMap
                    }
   deriving (Eq, FromJSON, Generic)
-
-domains      ∷ Lens' Hosts Domains
-domains      = lens _domains (\ hs d → hs { _domains = d })
-
-hosts        ∷ Lens' Hosts LHostMap
-hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
-
-dnsServers  ∷ Lens' Hosts [Localname]
-dnsServers  = lens _dnsServers (\ hs ds → hs { _dnsServers = ds })
-
-mailServers ∷ Lens' Hosts [Localname]
-mailServers = lens _mailServers (\ hs ms → hs { _mailServers = ms })
-
-aliases       ∷ Lens' Hosts LocalnameMap
-aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 
 instance HasSubDomain Hosts where
   subDomain = domains ∘ subDomain
@@ -138,6 +138,23 @@ instance Show Hosts where
                             , "MAILSERVERS: " ⊕ show (h ⊣ mailServers)
                             , "ALIASES:     " ⊕ show (h ⊣ aliases)
                             ]
+
+----------------------------------------
+
+domains      ∷ Lens' Hosts Domains
+domains      = lens _domains (\ hs d → hs { _domains = d })
+
+hosts        ∷ Lens' Hosts LHostMap
+hosts        = lens _hosts (\ hs lhm → hs { _hosts = lhm })
+
+dnsServers  ∷ Lens' Hosts [Localname]
+dnsServers  = lens _dnsServers (\ hs ds → hs { _dnsServers = ds })
+
+mailServers ∷ Lens' Hosts [Localname]
+mailServers = lens _mailServers (\ hs ms → hs { _mailServers = ms })
+
+aliases       ∷ Lens' Hosts LocalnameMap
+aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 
 ----------------------------------------
 
@@ -173,11 +190,27 @@ hostIPv4s = fmap ( \ h → (h ⊣ hname, h ⊣ ipv4) ) ∘ hostsHosts
 ----------------------------------------
 
 {- | a map from local alias names to the underlying host (if any) -}
-aliasHosts ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → η (HashMap Localname Host)
+aliasHosts ∷ (AsHostsError ε, MonadError ε η) ⇒
+             Hosts → η (HashMap Localname Host)
 aliasHosts hs =
   traverseWithKey (\ l a → mapMError (aliasNotFound l) $ lookupHost hs a)
                   (unLHMap (view aliases hs))
 
 ----------------------------------------
+
+{- | Find all the "valid" Hostname → IP4 mappings, ignoring hosts called α-wl
+     that share an IP with α; and additionally return errors for (other)
+     duplicates and missing IPs, etc.
+ -}
+hostIPs ∷ Hosts → ([(Hostname,IP4)],ErrTs)
+hostIPs hs =
+  let dupIPHosts ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
+      hostsByIP  ∷ Map.Map IP4 Hostname
+      (dupIPHosts, hostsByIP) = fromListWithDups $ swap ⊳ hostIPv4s hs
+
+      (filteredDups,es) = filterWL dupIPHosts
+      hostList = swap ⊳ ю [ Map.toList hostsByIP
+                          , Map.toList filteredDups ]
+   in (hostList, es)
 
 -- that's all, folks! ----------------------------------------------------------

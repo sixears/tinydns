@@ -28,7 +28,6 @@ import Data.Function   ( ($), (&), flip, id )
 import Data.Functor    ( fmap )
 import Data.Maybe      ( Maybe( Just ) )
 import Data.String     ( String )
-import Data.Tuple      ( swap )
 import System.IO       ( IO )
 import Text.Show       ( Show( show ) )
 
@@ -40,10 +39,6 @@ import Data.Monoid.Unicode    ( (⊕) )
 -- bytestring --------------------------
 
 import Data.ByteString  ( readFile )
-
--- containers --------------------------
-
-import qualified  Data.Map  as  Map
 
 -- data-textual ------------------------
 
@@ -58,18 +53,14 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 import DomainNames.Error.DomainError     ( AsDomainError )
 import DomainNames.FQDN                  ( fqdn )
-import DomainNames.Hostname              ( Hostname, (<..>)
-                                         , filterWL, hostname, localname )
+import DomainNames.Hostname              ( (<..>), hostname, localname )
 
 -- fluffy ------------------------------
 
-import Fluffy.Containers.NonEmptyHashSet
-                             ( NonEmptyHashSet )
 import Fluffy.ErrTs          ( ErrTs, toTexts )
 import Fluffy.IO.Error       ( AsIOError )
-import Fluffy.IP4            ( IP4, ip4 )
+import Fluffy.IP4            ( ip4 )
 import Fluffy.MACAddress     ( mac )
-import Fluffy.MapUtils       ( fromListWithDups )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Nat            ( One )
@@ -82,8 +73,8 @@ import Fluffy.Path           ( AbsDir, AbsFile, RelFile
 import HostsDB.Error.HostsError  ( AsHostsError, HostsDomainExecCreateIOError )
 import HostsDB.Host              ( Host( Host ), hname, ipv4 )
 import HostsDB.Hosts             ( Domains( Domains ), Hosts( Hosts )
-                                 , aliasHosts, dnsServers, hostIPv4
-                                 , hostIPv4s, inAddr, lookupHost, mailServers
+                                 , aliasHosts, dnsServers, hostIPs, hostIPv4
+                                 , inAddr, lookupHost, mailServers
                                  , subDomain
                                  )
 import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
@@ -100,7 +91,7 @@ import System.FilePath.Lens  ( directory )
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
 import Data.MoreUnicode.Monad        ( (≫) )
-import Data.MoreUnicode.Monoid2      ( ф, ю )
+import Data.MoreUnicode.Monoid2      ( ф )
 import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
@@ -299,23 +290,6 @@ main = do
   forM_ (toTexts es') $ putStrLn ∘ ("!ERROR: " ⊕)
 
 ----------------------------------------
-
-{- | From a HostsDB, find all the "valid" Hostname → IP4 mappings,
-     ignoring hosts called α-wl that share an IP with α; and additionally
-     return errors for (other) duplicates and missing IPs, etc.
- -}
-hostIPs ∷ Hosts → ([(Hostname,IP4)],ErrTs)
-hostIPs hs =
-  let dupIPHosts ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
-      hostsByIP  ∷ Map.Map IP4 Hostname
-      (dupIPHosts, hostsByIP) = fromListWithDups $ swap ⊳ hostIPv4s hs
-
-      (filteredDups,es) = filterWL dupIPHosts
-      hostList = swap ⊳ ю [ Map.toList hostsByIP
-                          , Map.toList filteredDups ]
-   in (hostList, es)
-
-------------------------------------------------------------
 
 mkNSCmds ∷ (AsCreateProcError ε, AsExecError ε, AsHostsError ε, AsIOError ε,
             MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒

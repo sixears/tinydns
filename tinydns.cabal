@@ -111,9 +111,9 @@ executable mktinydnsdata
   -- add ?RTS -xt -hy to produce a usage graph
   main-is:             mktinydnsdata.hs
   hs-source-dirs:      bin
-  build-depends:       base, base-unicode-symbols, bytestring, containers
-                     , data-textual, dhall, lens, mtl, optparse-applicative
-                     , path, split, text, unordered-containers, yaml
+  build-depends:       base, base-unicode-symbols, bytestring, data-textual
+                     , dhall, lens, mtl, optparse-applicative, path, split, text
+                     , unordered-containers, yaml
 
                      , fluffy >= 0.2.8.0, more-unicode >= 0.0.4.0
                      , proclib >= 3.1.1.0, tfmt >= 0.2.1.0
