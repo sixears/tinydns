@@ -3,7 +3,6 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
--- {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -21,22 +20,20 @@ import Prelude ( error )
 
 -- base --------------------------------
 
-import Control.Monad       ( foldM, forM, forM_, mapM, return )
-import Data.Bifunctor      ( first )
-import Data.Either         ( Either, either )
-import Data.Eq             ( Eq )
-import Data.Function       ( ($), (&), flip, id )
-import Data.Functor        ( fmap )
-import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
-import Data.Maybe          ( Maybe( Just ) )
-import Data.String         ( String )
-import Data.Tuple          ( swap )
-import System.IO           ( IO )
-import Text.Show           ( Show( show ) )
+import Control.Monad   ( foldM, forM, forM_, mapM, return )
+import Data.Bifunctor  ( first )
+import Data.Either     ( Either, either )
+import Data.Eq         ( Eq )
+import Data.Function   ( ($), (&), flip, id )
+import Data.Functor    ( fmap )
+import Data.Maybe      ( Maybe( Just ) )
+import Data.String     ( String )
+import Data.Tuple      ( swap )
+import System.IO       ( IO )
+import Text.Show       ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
-import Data.Eq.Unicode        ( (≡) )
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
 
@@ -47,7 +44,6 @@ import Data.ByteString  ( readFile )
 -- containers --------------------------
 
 import qualified  Data.Map  as  Map
-import Data.Map  ( mapAccumWithKey )
 
 -- data-textual ------------------------
 
@@ -60,16 +56,16 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 -- domainnames -------------------------
 
-import DomainNames.Domain                ( IsDomainLabels( dLabels ) )
 import DomainNames.Error.DomainError     ( AsDomainError )
 import DomainNames.FQDN                  ( fqdn )
-import DomainNames.Hostname              ( Hostname
-                                         , (<..>), hostname, localname )
+import DomainNames.Hostname              ( Hostname, (<..>)
+                                         , filterWL, hostname, localname )
 
 -- fluffy ------------------------------
 
 import Fluffy.Containers.NonEmptyHashSet
-                             ( NonEmptyHashSet, toNEList )
+                             ( NonEmptyHashSet )
+import Fluffy.ErrTs          ( ErrTs, toTexts )
 import Fluffy.IO.Error       ( AsIOError )
 import Fluffy.IP4            ( IP4, ip4 )
 import Fluffy.MACAddress     ( mac )
@@ -92,7 +88,6 @@ import HostsDB.Hosts             ( Domains( Domains ), Hosts( Hosts )
                                  )
 import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ) )
-import HostsDB.Types.ErrTs       ( ErrTs, errT, toTexts )
 
 -- lens --------------------------------
 
@@ -148,7 +143,7 @@ import Data.Text.IO  ( putStrLn )
 
 -- tfmt --------------------------------
 
-import Text.Fmt  ( fmt, fmtT )
+import Text.Fmt  ( fmtT )
 
 -- unordered-containers ----------------
 
@@ -317,43 +312,6 @@ __runProc__ ∷ MonadIO μ ⇒ CmdSpec → μ ()
 __runProc__ = exceptIOThrow ∘ runProc @_ @ExecCreateError
 
 ----------------------------------------
-
--- given two hostnames; if one is the other+"-wl", then return the base
--- name - else return the first name, and an error
-checkWL' ∷ Hostname → Hostname → (ErrTs,Hostname)
-checkWL' h1 h2 =
-  let (l1 :| d1) = h1 ⊣ dLabels
-      (l2 :| d2) = h2 ⊣ dLabels
-      errNm = [fmt|names are not "x" vs. "x-wl": '%T' vs. '%T'|] h1 h2
-      errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
-   in if d1 ≡ d2
-      then if toText l1 ≡ toText l2 ⊕ "-wl"
-           then (ф,h2)
-           else if toText l2 ≡ toText l1 ⊕ "-wl"
-                then (ф,h1)
-                else (errT errNm,h1)
-      else (errT errDm,h1)
-
-
-{- | Check that ip4, {hostnames} is actually pair of hostnames where one
-     is the other + "-wl"; return the base name; or else add an error.
-     The IP is passed just for the errmsg
- -}
-checkWL ∷ IP4 → NonEmptyHashSet Hostname → (ErrTs, Hostname)
-checkWL i hh = let errTooMany l = [fmt|too many hosts for IP %T (%L)|] i l
-                in case toNEList hh of
-                     h  :| []     → (ф,h)
-                     h1 :| [h2]   → checkWL' h1 h2
-                     lh@(h1 :| _) → (errT (errTooMany lh), h1)
-
-{- | Check that the map ip4 -> hostnames has only pairs of hostnames where one
-     is the other + "-wl"; return the base name in each case (and errors for
-     ip->{many hostnames} that don't fit that rule).
- -}
-filterWL ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
-         → (Map.Map IP4 Hostname, ErrTs)
-filterWL = let accumulator es i hh = let (es',h) = checkWL i hh in (es'⊕es, h)
-            in swap ∘ mapAccumWithKey accumulator ф
 
 {- | From a HostsDB, find all the "valid" Hostname → IP4 mappings,
      ignoring hosts called α-wl that share an IP with α; and additionally

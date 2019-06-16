@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UnicodeSyntax     #-}
 
-module HostsDB.Types.ErrTs
+module Fluffy.ErrTs
   ( ErrTs, errT, toTexts )
 where
 

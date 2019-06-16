@@ -2,14 +2,17 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE UnicodeSyntax     #-}
 {-# LANGUAGE ViewPatterns      #-}
 
 module DomainNames.Hostname
-  ( Hostname, Localname, (<.>), (<..>)
-  , host, hostlocal, hostname, localname, parseHostname, parseHostname'
-  , __parseHostname, __parseHostname', parseLocalname, parseLocalname'
+  ( Hostname, Localname
+  , (<.>), (<..>)
+  , checkWL, checkWL', filterWL, host, hostlocal, hostname, localname
+  , parseHostname, parseHostname', __parseHostname, __parseHostname'
+  , parseLocalname, parseLocalname'
   )
 where
 
@@ -19,18 +22,28 @@ import Data.Aeson.Types  ( typeMismatch )
 
 -- base --------------------------------
 
-import Control.Monad   ( fail, return )
-import Data.Either     ( either )
-import Data.Eq         ( Eq )
-import Data.Function   ( ($) )
-import Data.Maybe      ( Maybe( Just, Nothing ) )
-import Data.String     ( String )
-import GHC.Generics    ( Generic )
-import Text.Show       ( Show )
+import Control.Monad       ( fail, return )
+import Data.Either         ( either )
+import Data.Eq             ( Eq )
+import Data.Function       ( ($) )
+import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
+import Data.Maybe          ( Maybe( Just, Nothing ) )
+import Data.String         ( String )
+import Data.Tuple          ( swap )
+import GHC.Generics        ( Generic )
+import Text.Show           ( Show )
 
 -- base-unicode-symbols ----------------
 
+import Data.Eq.Unicode        ( (≡) )
 import Data.Function.Unicode  ( (∘) )
+import Data.Monoid.Unicode    ( (⊕) )
+
+-- containers --------------------------
+
+import qualified  Data.Map  as  Map
+
+import Data.Map  ( mapAccumWithKey )
 
 -- data-textual ------------------------
 
@@ -42,8 +55,12 @@ import Dhall  ( Interpret( autoWith ) )
 
 -- fluffy ------------------------------
 
+import Fluffy.Containers.NonEmptyHashSet
+                       ( NonEmptyHashSet, toNEList )
 import Fluffy.Either   ( __right )
+import Fluffy.ErrTs    ( ErrTs, errT )
 import Fluffy.Functor  ( (⊳) )
+import Fluffy.IP4      ( IP4 )
 import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 -- hashable ----------------------------
@@ -54,6 +71,11 @@ import Data.Hashable  ( Hashable )
 
 import Control.Lens.Getter  ( view )
 import Control.Lens.Iso     ( from, iso )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Monoid2  ( ф )
+import Data.MoreUnicode.Lens     ( (⊣) )
 
 -- mtl ---------------------------------
 
@@ -68,6 +90,10 @@ import Language.Haskell.TH.Quote  ( QuasiQuoter )
 
 import Data.Text  ( Text, unsnoc )
 
+-- tfmt --------------------------------
+
+import Text.Fmt  ( fmt )
+
 -- yaml --------------------------------
 
 import Data.Yaml  ( FromJSON( parseJSON ), Value( String ) )
@@ -77,7 +103,8 @@ import Data.Yaml  ( FromJSON( parseJSON ), Value( String ) )
 ------------------------------------------------------------
 
 import DomainNames.Domain               ( DomainLabel
-                                        , IsDomainLabels( domainLabels )
+                                        , IsDomainLabels( dLabels
+                                                        , domainLabels )
                                         , domainHead, prepend, parseDomainLabel'
                                         )
 import DomainNames.Error.DomainError    ( AsDomainError
@@ -185,5 +212,49 @@ host = hostname
 
 (<..>) ∷ (AsDomainError ε, MonadError ε η) ⇒ Localname → FQDN → η Hostname
 (Localname d) <..> f = Hostname ⊳ (prepend d f)
+
+----------------------------------------
+
+-- given two hostnames; if one is the other+"-wl", then return the base
+-- name - else return the first name, and an error
+checkWL' ∷ Hostname → Hostname → (ErrTs,Hostname)
+checkWL' h1 h2 =
+  let (l1 :| d1) = h1 ⊣ dLabels
+      (l2 :| d2) = h2 ⊣ dLabels
+      errNm = [fmt|names are not "x" vs. "x-wl": '%T' vs. '%T'|] h1 h2
+      errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
+   in if d1 ≡ d2
+      then if toText l1 ≡ toText l2 ⊕ "-wl"
+           then (ф,h2)
+           else if toText l2 ≡ toText l1 ⊕ "-wl"
+                then (ф,h1)
+                else (errT errNm,h1)
+      else (errT errDm,h1)
+
+--------------------
+
+{- | Check that ip4, {hostnames} is actually pair of hostnames where one
+     is the other + "-wl"; return the base name; or else add an error.
+     The IP is passed just for the errmsg
+ -}
+checkWL ∷ IP4 → NonEmptyHashSet Hostname → (ErrTs, Hostname)
+checkWL i hh = let errTooMany l = [fmt|too many hosts for IP %T (%L)|] i l
+                in case toNEList hh of
+                     h  :| []     → (ф,h)
+                     h1 :| [h2]   → checkWL' h1 h2
+                     lh@(h1 :| _) → (errT (errTooMany lh), h1)
+
+----------------------------------------
+
+{- | Check that the map ip4 -> hostnames has only pairs of hostnames where one
+     is the other + "-wl"; return the base name in each case (and errors for
+     ip->{many hostnames} that don't fit that rule).
+ -}
+filterWL ∷ Map.Map IP4 (NonEmptyHashSet Hostname)
+         → (Map.Map IP4 Hostname, ErrTs)
+filterWL = let accumulator es i hh = let (es',h) = checkWL i hh in (es'⊕es, h)
+            in swap ∘ mapAccumWithKey accumulator ф
+
+
 
 -- that's all, folks! ----------------------------------------------------------

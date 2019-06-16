@@ -63,6 +63,7 @@ library
                     , DomainNames.UQDN
                     , DomainNames.Error.UQDNError
 
+                    , Fluffy.ErrTs
                     , Fluffy.Temp2
 
                     , HostsDB.Error.HostsError
@@ -73,7 +74,6 @@ library
                     , HostsDB.Hosts
                     , HostsDB.T.Hosts
                     , HostsDB.LocalnameMap
-                    , HostsDB.Types.ErrTs
 
                     , TinyDNS.Edit
                     , TinyDNS.Paths
@@ -88,10 +88,11 @@ library
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:      aeson, base, base-unicode-symbols, data-textual, dhall
-                    , hashable, lens, mono-traversable, more-unicode, mtl
-                    , path, tasty, tasty-hunit, template-haskell, text
-                    , text-printer, unix, unordered-containers, yaml
+  build-depends:      aeson, base, base-unicode-symbols, containers
+                    , data-textual, dhall, hashable, lens, mono-traversable
+                    , more-unicode, mtl, path, tasty, tasty-hunit
+                    , template-haskell, text, text-printer, unix
+                    , unordered-containers, yaml
 
                     , fluffy >= 0.2.8.0, proclib >= 3.1.1.1, tfmt
 
