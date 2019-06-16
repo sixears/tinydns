@@ -73,6 +73,7 @@ library
                     , HostsDB.Hosts
                     , HostsDB.T.Hosts
                     , HostsDB.LocalnameMap
+                    , HostsDB.Types.ErrTs
 
                     , TinyDNS.Edit
                     , TinyDNS.Paths

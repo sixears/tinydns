@@ -29,8 +29,6 @@ import Data.Function       ( ($), (&), flip, id )
 import Data.Functor        ( fmap )
 import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
 import Data.Maybe          ( Maybe( Just ) )
-import Data.Monoid         ( Monoid( mempty ) )
-import Data.Semigroup      ( Semigroup( (<>) ) )
 import Data.String         ( String )
 import Data.Tuple          ( swap )
 import System.IO           ( IO )
@@ -94,6 +92,7 @@ import HostsDB.Hosts             ( Domains( Domains ), Hosts( Hosts )
                                  )
 import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
 import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ) )
+import HostsDB.Types.ErrTs       ( ErrTs, errT, toTexts )
 
 -- lens --------------------------------
 
@@ -144,7 +143,7 @@ import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 
 import qualified  Data.Text.IO
 
-import Data.Text     ( Text, pack )
+import Data.Text     ( pack )
 import Data.Text.IO  ( putStrLn )
 
 -- tfmt --------------------------------
@@ -318,20 +317,6 @@ __runProc__ ∷ MonadIO μ ⇒ CmdSpec → μ ()
 __runProc__ = exceptIOThrow ∘ runProc @_ @ExecCreateError
 
 ----------------------------------------
-
-newtype ErrTs = ErrTs [Text]
-
-toTexts ∷ ErrTs → [Text]
-toTexts (ErrTs ts) = ts
-
-errT ∷ Text → ErrTs
-errT t = ErrTs [t]
-
-instance Semigroup ErrTs where
-  (ErrTs es) <> (ErrTs es') = ErrTs (es ⊕ es')
-
-instance Monoid ErrTs where
-  mempty = ErrTs []
 
 -- given two hostnames; if one is the other+"-wl", then return the base
 -- name - else return the first name, and an error
