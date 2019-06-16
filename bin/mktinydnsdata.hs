@@ -105,7 +105,6 @@ import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
 
-import Control.Monad.Except  ( MonadError )
 import Control.Monad.Reader  ( MonadReader, asks, runReaderT )
 import Control.Monad.Trans   ( lift )
 
@@ -128,11 +127,8 @@ import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel( verboseLevel ), Verbose
                                       , verboseOn, verboseP )
 import ProcLib.Error.CreateProcError  ( AsCreateProcError )
 import ProcLib.Error.ExecError        ( AsExecError )
-import ProcLib.Error.ExecCreateError  ( ExecCreateError )
-import ProcLib.Process                ( doProcIO, mkProc_, runProcIO )
-import ProcLib.Types.CmdSpec          ( CmdSpec )
+import ProcLib.Process                ( doProcIO )
 import ProcLib.Types.ProcIO           ( ProcIO )
-import ProcLib.Types.RunProcOpts      ( defRunProcOpts, verboseL )
 
 -- text --------------------------------
 
@@ -301,15 +297,6 @@ main = do
   (t,es') ← exceptIOThrow ∘ flip runReaderT (RuntimeContext (opts ⊣ clean) hs) $ doProcIO @_ @_ @_ @_ @HostsDomainExecCreateIOError opts (mkData hs)
   putStrLn (toText t)
   forM_ (toTexts es') $ putStrLn ∘ ("!ERROR: " ⊕)
-
-----------------------------------------
-
-runProc ∷ (MonadIO μ, AsCreateProcError ε, AsExecError ε, MonadError ε μ) ⇒
-          CmdSpec → μ ()
-runProc c = runProcIO (defRunProcOpts & verboseL ⊢ 1) $ mkProc_ c
-
-__runProc__ ∷ MonadIO μ ⇒ CmdSpec → μ ()
-__runProc__ = exceptIOThrow ∘ runProc @_ @ExecCreateError
 
 ----------------------------------------
 
