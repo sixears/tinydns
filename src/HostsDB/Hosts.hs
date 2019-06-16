@@ -35,7 +35,7 @@ import Data.Monoid.Unicode    ( (⊕) )
 -- dhall -------------------------------
 
 import qualified  Dhall  as  D
-import Dhall  ( Interpret( autoWith ), Type, auto, field, record )
+import Dhall  ( Interpret( autoWith ), auto, field, record )
 
 -- domainnames -------------------------
 
@@ -119,13 +119,6 @@ mailServers = lens _mailServers (\ hs ms → hs { _mailServers = ms })
 aliases       ∷ Lens' Hosts LocalnameMap
 aliases       = lens _aliases (\ hs as → hs { _aliases = as })
 
-hostsType ∷ Type Hosts
-hostsType = record $ Hosts ⊳ field "domains"      auto
-                           ⊵ field "hosts"        auto
-                           ⊵ field "dns_servers"  (D.list auto)
-                           ⊵ field "mail_servers" (D.list auto)
-                           ⊵ field "aliases"      auto
-
 instance HasSubDomain Hosts where
   subDomain = domains ∘ subDomain
 
@@ -133,7 +126,11 @@ instance HasINAddr Hosts where
   inAddr = domains ∘ inAddr
 
 instance Interpret Hosts where
-  autoWith _ = hostsType
+  autoWith _ = record $ Hosts ⊳ field "domains"      auto
+                              ⊵ field "hosts"        auto
+                              ⊵ field "dns_servers"  (D.list auto)
+                              ⊵ field "mail_servers" (D.list auto)
+                              ⊵ field "aliases"      auto
 
 instance Show Hosts where
   show h = intercalate "\n" [ "HOSTS:       " ⊕ show (h ⊣ hosts)
@@ -142,29 +139,45 @@ instance Show Hosts where
                             , "ALIASES:     " ⊕ show (h ⊣ aliases)
                             ]
 
+----------------------------------------
+
 lookupHost ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → Localname → η Host
 lookupHost hs l = let hs' = unLHostMap $ view hosts hs
                    in maybe (localnameNotFound l) return $ lookup l hs'
 
+--------------------
+
 lookupHost' ∷ MonadError HostsError η ⇒ Hosts → Localname → η Host
 lookupHost' = lookupHost
+
+----------------------------------------
 
 hostIPv4 ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → Localname → η IP4
 hostIPv4 hs h = view ipv4 ⊳ lookupHost hs h
 
+--------------------
+
 hostIPv4' ∷ MonadError HostsError η ⇒ Hosts → Localname → η IP4
 hostIPv4' = hostIPv4
+
+----------------------------------------
 
 hostsHosts ∷ Hosts → [Host]
 hostsHosts = lhmHosts ∘ view hosts
 
+----------------------------------------
+
 hostIPv4s ∷ Hosts → [(Hostname,IP4)]
 hostIPv4s = fmap ( \ h → (h ⊣ hname, h ⊣ ipv4) ) ∘ hostsHosts
+
+----------------------------------------
 
 {- | a map from local alias names to the underlying host (if any) -}
 aliasHosts ∷ (AsHostsError ε, MonadError ε η) ⇒ Hosts → η (HashMap Localname Host)
 aliasHosts hs =
   traverseWithKey (\ l a → mapMError (aliasNotFound l) $ lookupHost hs a)
                   (unLHMap (view aliases hs))
+
+----------------------------------------
 
 -- that's all, folks! ----------------------------------------------------------
