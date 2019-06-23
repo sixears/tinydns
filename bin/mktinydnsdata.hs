@@ -2,9 +2,9 @@
 
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
+-- {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+-- {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE QuasiQuotes           #-}
 -- {-# LANGUAGE Rank2Types            #-}
@@ -51,15 +51,15 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 -- domainnames -------------------------
 
-import DomainNames.FQDN                  ( fqdn )
-import DomainNames.Hostname              ( hostname, localname )
+import DomainNames.FQDN      ( fqdn )
+import DomainNames.Hostname  ( hostname, localname )
 
 -- fluffy ------------------------------
 
 import Fluffy.ErrTs          ( toTexts )
 import Fluffy.IP4            ( ip4 )
 import Fluffy.MACAddress     ( mac )
-import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO )
+import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Nat            ( One )
 import Fluffy.Options        ( optParser )
@@ -104,11 +104,11 @@ import Path  ( File, Path, (</>), absfile, toFilePath )
 
 -- proclib -----------------------------
 
-import ProcLib.CommonOpt.DryRun       ( DryRun, HasDryRunLevel( dryRunLevel )
-                                      , dryRunOn, dryRunP )
-import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel( verboseLevel ), Verbose
-                                      , verboseOn, verboseP )
-import ProcLib.Process                ( doProcIO )
+import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel )
+                                  , dryRunOn, dryRunP )
+import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
+                                  , verboseOn, verboseP )
+import ProcLib.Process            ( doProcIO )
 
 -- text --------------------------------
 
@@ -133,8 +133,8 @@ import Data.Yaml  ( decodeEither' )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Hosts              ( mkData )
-import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean, NoClean ) )
+import TinyDNS.Hosts        ( mkData )
+import TinyDNS.Types.Clean  ( HasClean( clean ), Clean( Clean, NoClean ) )
 
 --------------------------------------------------------------------------------
 
@@ -261,18 +261,18 @@ main = do
 
   let infn = opts ⊣ input
       ext  = infn ⊣ extension
-  hs   ← case opts ⊣ testMode of
-           TestMode   → return testHosts
-           NoTestMode → let badExt = [fmtT|file ext not recognized: '%t'|] ext
-                         in case ext of
-                              ".yaml"  → __loadFileYaml__  (opts ⊣ input)
-                              ".dhall" → __loadFileDhall__ (opts ⊣ input)
-                              _        → dieUsage badExt
+  hs ← case opts ⊣ testMode of
+         TestMode   → return testHosts
+         NoTestMode → let badExt = [fmtT|file ext not recognized: '%t'|] ext
+                       in case ext of
+                            ".yaml"  → __loadFileYaml__  (opts ⊣ input)
+                            ".dhall" → __loadFileDhall__ (opts ⊣ input)
+                            _        → dieUsage badExt
 
 
   (t,es') ← exceptIOThrow ∘ flip runReaderT (RuntimeContext (opts ⊣ clean) hs) $ doProcIO @_ @_ @_ @_ @HostsDomainExecCreateIOError opts mkData
   putStrLn (toText t)
-  forM_ (toTexts es') $ putStrLn ∘ ("!ERROR: " ⊕)
+  forM_ (toTexts es') $ warn ∘ ("!ERROR: " ⊕)
 
 ----------------------------------------
 

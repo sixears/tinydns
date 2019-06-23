@@ -6,7 +6,7 @@
 
 module HostsDB.Hosts
   ( Domains( Domains ), HasHosts( hosts ), Hosts( Hosts )
-  , aliases, aliasHosts, dnsServers, domains, hosts, hostsHosts, hostIPs
+  , aliases, aliasHosts, dnsServers, domains, hostsHosts, hostIPs
   , hostIPv4, hostIPv4', hostIPv4s, inAddr, lhostmap, lookupHost, lookupHost'
   , mailServers, subDomain
   )
