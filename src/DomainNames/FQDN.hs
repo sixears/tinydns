@@ -22,6 +22,7 @@ import Data.Either    ( either )
 import Data.Eq        ( Eq )
 import Data.Function  ( ($) )
 import Data.Maybe     ( Maybe( Just, Nothing ) )
+import Data.Ord       ( Ord )
 import Data.String    ( String )
 import Text.Show      ( Show )
 
@@ -94,7 +95,7 @@ import DomainNames.Error.FQDNError    ( AsFQDNError
 --------------------------------------------------------------------------------
 
 newtype FQDN = FQDN { unFQDN ∷ DomainLabels }
-  deriving (Eq, Hashable, Show)
+  deriving (Eq, Hashable, Ord, Show)
 
 instance IsDomainLabels FQDN where
   domainLabels = iso unFQDN FQDN

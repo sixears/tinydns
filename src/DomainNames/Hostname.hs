@@ -28,6 +28,7 @@ import Data.Eq             ( Eq )
 import Data.Function       ( ($) )
 import Data.List.NonEmpty  ( NonEmpty( (:|) ) )
 import Data.Maybe          ( Maybe( Just, Nothing ) )
+import Data.Ord            ( Ord, max, min )
 import Data.String         ( String )
 import Data.Tuple          ( swap )
 import GHC.Generics        ( Generic )
@@ -154,7 +155,7 @@ localname = let parseExp ∷ String → ExpQ
 ------------------------------------------------------------
 
 newtype Hostname = Hostname { unHostname ∷ FQDN }
-  deriving (Eq, Generic, Hashable, Show)
+  deriving (Eq, Generic, Hashable, Ord, Show)
 
 instance Printable Hostname where
   print (Hostname fq) = print fq
@@ -221,15 +222,16 @@ checkWL' ∷ Hostname → Hostname → (ErrTs,Hostname)
 checkWL' h1 h2 =
   let (l1 :| d1) = h1 ⊣ dLabels
       (l2 :| d2) = h2 ⊣ dLabels
-      errNm = [fmt|names are not "x" vs. "x-wl": '%T' vs. '%T'|] h1 h2
+      errNm = [fmt|names are not "x" vs. "x-wl": '%T' vs. '%T'|] (min h1 h2)
+                                                                 (max h1 h2)
       errDm = [fmt|different domains: '%T' vs. '%T'|] h1 h2
    in if d1 ≡ d2
       then if toText l1 ≡ toText l2 ⊕ "-wl"
            then (ф,h2)
            else if toText l2 ≡ toText l1 ⊕ "-wl"
                 then (ф,h1)
-                else (errT errNm,h1)
-      else (errT errDm,h1)
+                else (errT errNm, min h1 h2)
+      else (errT errDm, min h1 h2)
 
 --------------------
 

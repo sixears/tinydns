@@ -25,7 +25,7 @@ import Data.Function       ( ($), id )
 import Data.Functor        ( fmap )
 import Data.List.NonEmpty  ( NonEmpty( (:|) ), fromList, head )
 import Data.Maybe          ( Maybe( Just, Nothing ) )
-import Data.Ord            ( (>) )
+import Data.Ord            ( Ord, (>) )
 import Data.String         ( String )
 import Text.Show           ( Show )
 
@@ -122,7 +122,7 @@ import DomainNames.Error.DomainLabelError
 ------------------------------------------------------------
 
 newtype DomainLabel = DomainLabel Text
-  deriving (Eq, Hashable, Show)
+  deriving (Eq, Hashable, Ord, Show)
 
 instance Printable DomainLabel where
   print (DomainLabel dl) = P.text dl
@@ -173,7 +173,7 @@ class IsDomainLabels δ where
                      (view (from domainLabels) ∘ view (from dLabels))
 
 newtype DomainLabels = DomainLabels { unDomainLabels ∷ NonEmpty DomainLabel }
-  deriving (Eq, Hashable, Show)
+  deriving (Eq, Hashable, Ord, Show)
 
 instance IsDomainLabels DomainLabels where
   domainLabels = id

@@ -7,32 +7,22 @@
 {-# LANGUAGE UnicodeSyntax         #-}
 
 module TinyDNS.T.Hosts
-  ( tests )
+  ( mkDataHosts, testHosts, tests )
 where
-
-import Debug.Trace  ( trace, traceShow )
-import Prelude  ( (+) )
 
 -- base --------------------------------
 
-import Control.Monad    ( return )
 import Data.Either      ( Either( Left, Right ) )
 import Data.Eq          ( Eq )
-import Data.Foldable    ( Foldable, toList )
 import Data.Function    ( ($), flip )
-import Data.Functor     ( fmap )
-import Data.List        ( zip )
-import Data.Maybe       ( Maybe( Just, Nothing ) )
+import Data.Maybe       ( Maybe( Just ) )
 import Data.String      ( String )
-import Numeric.Natural  ( Natural )
 import System.IO        ( IO )
 import Text.Show        ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
-import Data.Eq.Unicode        ( (≡) )
-import Data.Function.Unicode  ( (∘) )
-import Data.Monoid.Unicode    ( (⊕) )
+import Data.Monoid.Unicode  ( (⊕) )
 
 -- data-default ------------------------
 
@@ -40,7 +30,7 @@ import Data.Default  ( Default( def ) )
 
 -- data-textual ------------------------
 
-import Data.Textual  ( Printable, toText )
+import Data.Textual  ( toText )
 
 -- domainnames -------------------------
 
@@ -50,17 +40,11 @@ import DomainNames.Hostname  ( hostname, localname )
 -- fluffy ------------------------------
 
 import Fluffy.ErrTs       ( ErrTs, toTexts )
-import Fluffy.Foldable    ( length )
-import Fluffy.HasIndex    ( (!!) )
 import Fluffy.IP4         ( ip4 )
 import Fluffy.MACAddress  ( mac )
 import Fluffy.MonadError  ( splitMError )
 import Fluffy.Nat         ( One )
-import Fluffy.Natural     ( nats )
-import Fluffy.Path        ( AbsDir, AbsFile, RelFile
-                          , extension, getCwd_, parseFile' )
-import Fluffy.Tasty       ( (≟), assertListEq, assertListEqR, assertRight
-                          , runTestsP_ )
+import Fluffy.Tasty       ( assertListEq, runTestsP_ )
 
 -- hostsdb -----------------------------
 
@@ -75,27 +59,20 @@ import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ) )
 
 import Control.Lens.Lens  ( Lens', lens )
 
--- more-unicode ------------------------
-
-import Data.MoreUnicode.Applicative  ( (⊵) )
-import Data.MoreUnicode.Functor      ( (⊳) )
-import Data.MoreUnicode.Monad        ( (≫), (⪼) )
-import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
-
 -- mtl ---------------------------------
 
 import Control.Monad.Reader  ( runReaderT )
 
--- path --------------------------------
+-- more-unicode ------------------------
 
-import Path  ( File, Path, (</>), absfile, toFilePath )
+import Data.MoreUnicode.Monoid2  ( ю )
 
 -- proclib -----------------------------
 
 import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel )
-                                  , dryRunOff, dryRunOn, dryRunP )
+                                  , dryRunOff )
 import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
-                                  , verboseOn, verboseP )
+                                  , verboseOn )
 import ProcLib.Process            ( doProcIO )
 
 -- tasty -------------------------------
@@ -104,16 +81,11 @@ import Test.Tasty  ( TestTree, defaultMain, testGroup )
 
 -- tasty-hunit -------------------------
 
-import Test.Tasty.HUnit  ( Assertion, HasCallStack
-                         , assertBool, assertFailure, testCase )
+import Test.Tasty.HUnit  ( assertFailure, testCase )
 
 -- text --------------------------------
 
-import Data.Text  ( Text, lines )
-
--- tfmt --------------------------------
-
-import Text.Fmt  ( fmt )
+import Data.Text  ( lines )
 
 -- unordered-containers ----------------
 
@@ -124,24 +96,17 @@ import qualified  Data.HashMap.Strict  as  HashMap
 ------------------------------------------------------------
 
 import TinyDNS.Hosts              ( mkData )
-import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean, NoClean ) )
+import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean ) )
 import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
 
 --------------------------------------------------------------------------------
 
-data TestMode = TestMode | NoTestMode
-
 data Options = Options { _dryRun   ∷ DryRun
                        , _verbose  ∷ Verbose
---                       , _input    ∷ AbsFile
---                       , _clean    ∷ Clean
---                       , _testMode ∷ TestMode
                        }
 {- | just for ghci testing -}
 instance Default Options where
   def =  Options dryRunOff verboseOn
---                 [absfile|/home/martyn/rc/nixos/hostcfg/sixears-hosts.dhall|]
---                 Clean TestMode
 
 dryRun ∷ Lens' Options DryRun
 dryRun = lens _dryRun (\ o d → o { _dryRun = d })
@@ -163,17 +128,17 @@ testHosts =
       lbaz          = [localname|baz|]
       lzootie1      = [localname|zootie1|]
       lzootie2      = [localname|zootie2|]
-      dmns          = Domains [fqdn|sixears.co.uk.|]
+      dmns          = Domains [fqdn|my.domain.|]
                               [fqdn|0.168.192.in-addr.arpa.|]
-      foohost       = Host [hostname|foo.sixears.co.uk.|] [ip4|192.168.1.2|]
+      foohost       = Host [hostname|foo.my.domain.|] [ip4|192.168.1.2|]
                            "descn" ["comment"] (Just [mac|01:23:45:67:89:0A|])
-      foowlhost     = Host [hostname|foo-wl.sixears.co.uk.|] [ip4|192.168.1.2|]
+      foowlhost     = Host [hostname|foo-wl.my.domain.|] [ip4|192.168.1.2|]
                            "descn" ["comment"] (Just [mac|0A:89:67:45:23:01|])
-      quuxhost      = Host [hostname|quux.sixears.co.uk.|] [ip4|192.168.1.2|]
+      quuxhost      = Host [hostname|quux.my.domain.|] [ip4|192.168.1.2|]
                            "descn" ["comment"] (Just [mac|12::34:56:78:90:A0|])
-      zootie1host   = Host [hostname|zootie1.sixears.co.uk.|] [ip4|192.168.1.3|]
+      zootie1host   = Host [hostname|zootie1.my.domain.|] [ip4|192.168.1.3|]
                            "descn" ["comment"] (Just [mac|12::34:56:78:90:A0|])
-      zootie2host   = Host [hostname|zootie2.sixears.co.uk.|] [ip4|192.168.1.3|]
+      zootie2host   = Host [hostname|zootie2.my.domain.|] [ip4|192.168.1.3|]
                            "descn" ["comment"] (Just [mac|12::34:56:78:90:A0|])
       hsts          = LHostMap $ HashMap.fromList [ (lfoo,foohost)
                                                   , (lfoowl,foowlhost)
@@ -199,29 +164,34 @@ instance HasHosts RuntimeContext where
 
 myTests ∷ Show ε ⇒ Either ε (TinyDNSData,ErrTs) → TestTree
 myTests ei =
-  let expect  = [ ".sixears.co.uk:192.168.1.2:a:259200"
+  let expect  = [ ".my.domain:192.168.1.2:a:259200"
                 , ".0.168.192.in-addr.arpa:192.168.1.2:a:259200"
-                , "=foo-wl.sixears.co.uk:192.168.1.2:86400"
-                , "=zootie1.sixears.co.uk:192.168.1.3:86400"
-                , "+baz.sixears.co.uk:192.168.1.2:86400"
-                , "@foo.sixears.co.uk:192.168.1.2:a::86400"
+                , "=foo-wl.my.domain:192.168.1.2:86400"
+                , "=zootie1.my.domain:192.168.1.3:86400"
+                , "+baz.my.domain:192.168.1.2:86400"
+                , "@foo.my.domain:192.168.1.2:a::86400"
                 ]
       experrs = [   "names are not \"x\" vs. \"x-wl\": "
-                  ⊕ "'zootie1.sixears.co.uk.' vs. 'zootie2.sixears.co.uk.'"
+                  ⊕ "'zootie1.my.domain.' vs. 'zootie2.my.domain.'"
                 ,   "too many hosts for IP 192.168.1.2 "
-                  ⊕ "(foo-wl.sixears.co.uk.,quux.sixears.co.uk.,"
-                  ⊕ "foo.sixears.co.uk.)"
+                  ⊕ "(foo-wl.my.domain.,quux.my.domain.,"
+                  ⊕ "foo.my.domain.)"
                 ]
 
   in case ei of
        Left e → testCase "mkData" $ assertFailure (show e)
        Right (t,es) → testGroup "mkData"
-                                (assertListEq "tinydnsdata" expect (lines $ toText t) ⊕ assertListEq "errors" (toTexts es) experrs)
+                                (ю [ assertListEq "tinydnsdata"
+                                                   (lines $ toText t)
+                                                   expect
+                                   , assertListEq "errors" (toTexts es) experrs
+                                   ]
+                                )
 
-mkDataHosts ∷ Hosts → IO (Either HostsDomainExecCreateIOError (TinyDNSData, ErrTs))
-mkDataHosts hs = splitMError $ flip runReaderT (RuntimeContext Clean hs) $
-                      doProcIO @_ @Options @_ @_ @HostsDomainExecCreateIOError
-                               def mkData
+mkDataHosts ∷ Hosts
+            → IO (Either HostsDomainExecCreateIOError (TinyDNSData, ErrTs))
+mkDataHosts hs = splitMError $ flip runReaderT (RuntimeContext Clean hs)
+                             $ doProcIO @_ @Options def mkData
 
 tests ∷ Show ε ⇒ Either ε (TinyDNSData,ErrTs) → TestTree
 tests hs = testGroup "TinyDNS.Hosts" [ myTests hs ]
