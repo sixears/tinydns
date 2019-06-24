@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types        #-}
@@ -6,14 +7,14 @@
 
 module TinyDNS.Hosts
   ( {- | integration of tinydns cmds with HostsDB -}
-    mkAliasCmds, mkData, mkMxCmds, mkNSCmds
+    mkAliasCmds, mkData, mkDataHosts, mkDataHosts', mkMxCmds, mkNSCmds
   )
 where
 
 -- base --------------------------------
 
 import Control.Monad  ( foldM, forM, mapM, return )
-import Data.Function  ( ($) )
+import Data.Function  ( ($), flip )
 
 -- domainnames -------------------------
 
@@ -28,7 +29,7 @@ import Fluffy.MonadIO   ( MonadIO )
 
 -- hostsdb -----------------------------
 
-import HostsDB.Error.HostsError  ( AsHostsError )
+import HostsDB.Error.HostsError  ( AsHostsError, HostsDomainExecCreateIOError )
 import HostsDB.Host              ( hname, ipv4 )
 import HostsDB.Hosts             ( HasHosts
                                  , aliasHosts, dnsServers, hosts, hostIPs
@@ -49,13 +50,17 @@ import Data.MoreUnicode.Monoid2  ( ф )
 
 -- mtl ---------------------------------
 
-import Control.Monad.Reader  ( MonadReader, asks )
+import Control.Monad.Except  ( MonadError )
+import Control.Monad.Reader  ( MonadReader, asks, runReaderT )
 import Control.Monad.Trans   ( lift )
 
 -- proclib -----------------------------
 
+import ProcLib.CommonOpt.DryRun       ( HasDryRunLevel )
+import ProcLib.CommonOpt.Verbose      ( HasVerboseLevel )
 import ProcLib.Error.CreateProcError  ( AsCreateProcError )
 import ProcLib.Error.ExecError        ( AsExecError )
+import ProcLib.Process                ( doProcIO )
 import ProcLib.Types.ProcIO           ( ProcIO )
 
 -- unordered-containers ----------------
@@ -66,9 +71,10 @@ import qualified  Data.HashMap.Strict  as  HashMap
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Edit               ( addAliases, addHosts, addMx, addNSen )
-import TinyDNS.Types.Clean        ( HasClean )
-import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
+import TinyDNS.Edit                  ( addAliases, addHosts, addMx, addNSen )
+import TinyDNS.Types.Clean           ( HasClean( clean ) )
+import TinyDNS.Types.RuntimeContext  ( RuntimeContext( RuntimeContext ) )
+import TinyDNS.Types.TinyDNSData     ( TinyDNSData )
 
 --------------------------------------------------------------------------------
 
@@ -120,5 +126,21 @@ mkData = do
   tinydnsdata ← mkNSCmds ф ≫ addHosts hostList ≫ mkAliasCmds ≫ mkMxCmds
 
   return (tinydnsdata,es)
+
+----------------------------------------
+
+mkDataHosts ∷ (HasDryRunLevel υ θ, HasVerboseLevel ν θ, MonadIO μ,
+               MonadError ε μ, AsIOError ε, AsDomainError ε,
+               AsCreateProcError ε, AsExecError ε, AsHostsError ε,
+               HasClean ρ, HasHosts σ) ⇒
+              ρ → σ → θ → μ (TinyDNSData,ErrTs)
+mkDataHosts c hs o = let rContext = RuntimeContext (c ⊣ clean) (hs ⊣ hosts)
+                      in flip runReaderT rContext $ doProcIO o mkData
+
+mkDataHosts' ∷ (HasDryRunLevel υ θ, HasVerboseLevel ν θ, MonadIO μ,
+                MonadError HostsDomainExecCreateIOError μ,
+                HasClean ρ, HasHosts σ) ⇒
+               ρ → σ → θ → μ (TinyDNSData,ErrTs)
+mkDataHosts' = mkDataHosts
 
 -- that's all, folks! ----------------------------------------------------------

@@ -7,18 +7,17 @@
 {-# LANGUAGE UnicodeSyntax         #-}
 
 module TinyDNS.T.Hosts
-  ( mkDataHosts, testHosts, tests )
+  ( testHosts, tests )
 where
 
 -- base --------------------------------
 
-import Data.Either      ( Either( Left, Right ) )
-import Data.Eq          ( Eq )
-import Data.Function    ( ($), flip )
-import Data.Maybe       ( Maybe( Just ) )
-import Data.String      ( String )
-import System.IO        ( IO )
-import Text.Show        ( Show( show ) )
+import Data.Either    ( Either( Left, Right ) )
+import Data.Function  ( ($) )
+import Data.Maybe     ( Maybe( Just ) )
+import Data.String    ( String )
+import System.IO      ( IO )
+import Text.Show      ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
@@ -48,20 +47,14 @@ import Fluffy.Tasty       ( assertListEq, runTestsP_ )
 
 -- hostsdb -----------------------------
 
-import HostsDB.Error.HostsError  ( HostsDomainExecCreateIOError )
-import HostsDB.Host              ( Host( Host ) )
-import HostsDB.Hosts             ( Domains( Domains ), HasHosts( hosts )
-                                 , Hosts( Hosts ) )
-import HostsDB.LHostMap          ( LHostMap( LHostMap ) )
-import HostsDB.LocalnameMap      ( LocalnameMap( LocalnameMap ) )
+import HostsDB.Host          ( Host( Host ) )
+import HostsDB.Hosts         ( Domains( Domains ), Hosts( Hosts ) )
+import HostsDB.LHostMap      ( LHostMap( LHostMap ) )
+import HostsDB.LocalnameMap  ( LocalnameMap( LocalnameMap ) )
 
 -- lens --------------------------------
 
 import Control.Lens.Lens  ( Lens', lens )
-
--- mtl ---------------------------------
-
-import Control.Monad.Reader  ( runReaderT )
 
 -- more-unicode ------------------------
 
@@ -72,8 +65,7 @@ import Data.MoreUnicode.Monoid2  ( ю )
 import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel )
                                   , dryRunOff )
 import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
-                                  , verboseOn )
-import ProcLib.Process            ( doProcIO )
+                                  , verboseOff )
 
 -- tasty -------------------------------
 
@@ -95,8 +87,8 @@ import qualified  Data.HashMap.Strict  as  HashMap
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Hosts              ( mkData )
-import TinyDNS.Types.Clean        ( HasClean( clean ), Clean( Clean ) )
+import TinyDNS.Hosts              ( mkDataHosts' )
+import TinyDNS.Types.Clean        ( Clean( Clean ) )
 import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
 
 --------------------------------------------------------------------------------
@@ -106,7 +98,7 @@ data Options = Options { _dryRun   ∷ DryRun
                        }
 {- | just for ghci testing -}
 instance Default Options where
-  def =  Options dryRunOff verboseOn
+  def =  Options dryRunOff verboseOff
 
 dryRun ∷ Lens' Options DryRun
 dryRun = lens _dryRun (\ o d → o { _dryRun = d })
@@ -151,17 +143,6 @@ testHosts =
       aliases_      = LocalnameMap $ HashMap.fromList [(lbaz,lfoo)]
    in Hosts dmns hsts dnsServers_ mailServers_ aliases_
 
-data RuntimeContext = RuntimeContext { _clean_ ∷ Clean
-                                     , _hosts_ ∷ Hosts
-                                     }
-  deriving (Eq, Show)
-
-instance HasClean RuntimeContext where
-  clean = lens _clean_ (\ rc cl → rc { _clean_ = cl })
-
-instance HasHosts RuntimeContext where
-  hosts = lens _hosts_ (\ rc hs → rc { _hosts_ = hs })
-
 myTests ∷ Show ε ⇒ Either ε (TinyDNSData,ErrTs) → TestTree
 myTests ei =
   let expect  = [ ".my.domain:192.168.1.2:a:259200"
@@ -188,22 +169,24 @@ myTests ei =
                                    ]
                                 )
 
+{-
 mkDataHosts ∷ Hosts
             → IO (Either HostsDomainExecCreateIOError (TinyDNSData, ErrTs))
 mkDataHosts hs = splitMError $ flip runReaderT (RuntimeContext Clean hs)
                              $ doProcIO @_ @Options def mkData
+-}
 
 tests ∷ Show ε ⇒ Either ε (TinyDNSData,ErrTs) → TestTree
 tests hs = testGroup "TinyDNS.Hosts" [ myTests hs ]
 
 _test ∷ IO ()
 _test = do
-  hs ← mkDataHosts testHosts
+  hs ← splitMError $ mkDataHosts' @_ @Options Clean testHosts def
   defaultMain (tests hs)
 
 _tests ∷ String → IO ()
 _tests p = do
-  hs ← mkDataHosts testHosts
+  hs ← splitMError $ mkDataHosts' @_ @Options Clean testHosts def
   runTestsP_ (tests hs) p
 
 

@@ -8,8 +8,9 @@ where
 
 -- base --------------------------------
 
-import Data.Eq    ( Eq )
-import Text.Show  ( Show )
+import Data.Eq        ( Eq )
+import Data.Function  ( id )
+import Text.Show      ( Show )
 
 -- lens --------------------------------
 
@@ -26,5 +27,8 @@ data Clean    = Clean | NoClean
 
 class HasClean α where
   clean ∷ Lens' α Clean
+
+instance HasClean Clean where
+  clean = id
 
 -- that's all, folks! ----------------------------------------------------------

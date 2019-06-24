@@ -20,7 +20,7 @@ import Data.Aeson.Types  ( FromJSON )
 
 import Control.Monad  ( return )
 import Data.Eq        ( Eq )
-import Data.Function  ( ($) )
+import Data.Function  ( ($), id )
 import Data.Functor   ( fmap )
 import Data.List      ( intercalate )
 import Data.Maybe     ( maybe )
@@ -121,6 +121,9 @@ data Hosts = Hosts { _domains      ∷ Domains
 
 class HasHosts α where
   hosts ∷ Lens' α Hosts
+
+instance HasHosts Hosts where
+  hosts = id
 
 instance HasSubDomain Hosts where
   subDomain = domains ∘ subDomain
