@@ -49,7 +49,6 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 import Fluffy.ErrTs          ( toTexts )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
-import Fluffy.Nat            ( One )
 import Fluffy.Options        ( optParser )
 import Fluffy.Path           ( AbsDir, AbsFile, RelFile
                              , extension, getCwd_, parseFile' )
@@ -60,7 +59,6 @@ import HostsDB.Hosts  ( Hosts )
 
 -- lens --------------------------------
 
-import Control.Lens.Lens     ( Lens', lens )
 import System.FilePath.Lens  ( directory )
 
 -- more-unicode ------------------------
@@ -79,14 +77,12 @@ import Options.Applicative.Builder  ( ReadM, argument, eitherReader, flag, help
 
 -- path --------------------------------
 
-import Path  ( File, Path, (</>), absfile, toFilePath )
+import Path  ( File, Path, (</>), toFilePath )
 
 -- proclib -----------------------------
 
-import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel )
-                                  , dryRunOn, dryRunP )
-import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
-                                  , verboseOn, verboseP )
+import ProcLib.CommonOpt.DryRun   ( dryRunP )
+import ProcLib.CommonOpt.Verbose  ( verboseP )
 
 -- text --------------------------------
 
@@ -107,43 +103,13 @@ import Data.Yaml  ( decodeEither' )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Hosts                 ( mkDataHosts' )
-import TinyDNS.Types.Clean           ( HasClean( clean )
-                                     , Clean( Clean, NoClean ) )
+import TinyDNS.Hosts          ( mkDataHosts' )
+import TinyDNS.Types.MkTinyDNSData.Options
+                              ( Options( Options ), input )
+import TinyDNS.Types.Clean    ( HasClean( clean )
+                              , Clean( Clean, NoClean ) )
 
 --------------------------------------------------------------------------------
-
-data Options = Options { _dryRun   ∷ DryRun
-                       , _verbose  ∷ Verbose
-                       , _input    ∷ AbsFile
-                       , _clean    ∷ Clean
-                       }
-
-{- | just for ghci testing -}
-_defaultOptions ∷ Options
-_defaultOptions =
-  Options dryRunOn verboseOn
-          [absfile|/home/martyn/rc/nixos/hostcfg/sixears-hosts.dhall|] Clean
-
-dryRun ∷ Lens' Options DryRun
-dryRun = lens _dryRun (\ o d → o { _dryRun = d })
-
-instance HasDryRunLevel One Options where
-  dryRunLevel = dryRun
-
-verbose ∷ Lens' Options Verbose
-verbose = lens _verbose (\ o v → o { _verbose = v })
-
-instance HasVerboseLevel One Options where
-  verboseLevel = verbose
-
-input ∷ Lens' Options AbsFile
-input = lens _input (\ o i → o { _input = i })
-
-instance HasClean Options where
-  clean = lens _clean (\ o d → o { _clean = d })
-
-------------------------------------------------------------
 
 readAbsFile ∷ AbsDir → ReadM AbsFile
 readAbsFile cwd = eitherReader go
@@ -195,7 +161,5 @@ main = do
   (t,es') ← exceptIOThrow $ mkDataHosts' (opts ⊣ clean) hs opts
   putStr (toText t)
   forM_ (toTexts es') $ warn ∘ ("!ERROR: " ⊕)
-
-----------------------------------------
 
 -- that's all, folks! ----------------------------------------------------------

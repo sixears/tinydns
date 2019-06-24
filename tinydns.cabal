@@ -80,6 +80,7 @@ library
                     , TinyDNS.Hosts, TinyDNS.T.Hosts
                     , TinyDNS.Paths
                     , TinyDNS.Types.Clean
+                    , TinyDNS.Types.MkTinyDNSData.Options
                     , TinyDNS.Types.RuntimeContext
                     , TinyDNS.Types.TinyDNSData
 
