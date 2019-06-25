@@ -6,30 +6,50 @@
 {-# LANGUAGE UnicodeSyntax         #-}
 
 module TinyDNS.Types.MkTinyDNSData.Options
-  ( Options( Options ), input )
+  ( Options( Options ), input, parseOptions )
 where
 
 -- base --------------------------------
 
+import Data.Function  ( ($) )
+import Data.Maybe     ( Maybe( Just ) )
+
+-- base-unicode-symbols ----------------
+
+import Data.Monoid.Unicode    ( (⊕) )
+
 -- fluffy ------------------------------
 
-import Fluffy.Nat   ( One )
-import Fluffy.Path  ( AbsFile )
+import Fluffy.Nat    ( One )
+import Fluffy.Path   ( AbsDir, AbsFile )
+import Fluffy.Path2  ( readAbsFile )
 
 -- lens --------------------------------
 
 import Control.Lens.Lens  ( Lens', lens )
 
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Applicative  ( (⊵) )
+import Data.MoreUnicode.Functor      ( (⊳) )
+
+-- optparse-applicative ----------------
+
+import Options.Applicative.Builder  ( argument, flag, help, long, metavar )
+import Options.Applicative.Types    ( Parser )
+
 -- proclib -----------------------------
 
-import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel ) )
-import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose )
+import ProcLib.CommonOpt.DryRun   ( DryRun, HasDryRunLevel( dryRunLevel )
+                                  , dryRunP )
+import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
+                                  , verboseP )
 
 ------------------------------------------------------------
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Types.Clean  ( HasClean( clean ), Clean )
+import TinyDNS.Types.Clean  ( HasClean( clean ), Clean( Clean, NoClean ) )
 
 --------------------------------------------------------------------------------
 
@@ -56,5 +76,15 @@ input = lens _input (\ o i → o { _input = i })
 
 instance HasClean Options where
   clean = lens _clean (\ o d → o { _clean = d })
+
+----------------------------------------
+
+parseOptions ∷ AbsDir → Parser Options
+parseOptions cwd =
+  let cleanHelpText = "don't delete intermediate files"
+   in Options ⊳ dryRunP
+              ⊵ verboseP
+              ⊵ argument (readAbsFile $ Just cwd) (metavar "HOSTS.dhall")
+              ⊵ flag Clean NoClean (long "no-clean" ⊕ help cleanHelpText)
 
 -- that's all, folks! ----------------------------------------------------------

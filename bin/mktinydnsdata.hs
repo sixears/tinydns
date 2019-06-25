@@ -20,7 +20,6 @@ import Prelude ( error )
 import Control.Monad   ( forM_, return )
 import Data.Either     ( either )
 import Data.Function   ( ($), (&) )
-import Data.Maybe      ( Maybe( Just ) )
 import System.IO       ( IO )
 import Text.Show       ( Show( show ) )
 
@@ -48,8 +47,7 @@ import Fluffy.ErrTs          ( toTexts )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Options        ( optParser )
-import Fluffy.Path           ( AbsDir, extension, getCwd_ )
-import Fluffy.Path2          ( readAbsFile )
+import Fluffy.Path           ( extension, getCwd_ )
 
 -- hostsdb -----------------------------
 
@@ -61,25 +59,13 @@ import System.FilePath.Lens  ( directory )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Applicative  ( (⊵) )
-import Data.MoreUnicode.Functor      ( (⊳) )
-import Data.MoreUnicode.Monad        ( (≫) )
-import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
-
--- optparse-applicative ----------------
-
-import qualified  Options.Applicative.Types  as  OptParse
-
-import Options.Applicative.Builder  ( argument, flag, help, long, metavar )
+import Data.MoreUnicode.Functor  ( (⊳) )
+import Data.MoreUnicode.Monad    ( (≫) )
+import Data.MoreUnicode.Lens     ( (⊣), (⊢) )
 
 -- path --------------------------------
 
 import Path  ( File, Path, toFilePath )
-
--- proclib -----------------------------
-
-import ProcLib.CommonOpt.DryRun   ( dryRunP )
-import ProcLib.CommonOpt.Verbose  ( verboseP )
 
 -- text --------------------------------
 
@@ -99,33 +85,23 @@ import Data.Yaml  ( decodeEither' )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import TinyDNS.Hosts          ( mkDataHosts' )
-import TinyDNS.Types.MkTinyDNSData.Options
-                              ( Options( Options ), input )
-import TinyDNS.Types.Clean    ( HasClean( clean )
-                              , Clean( Clean, NoClean ) )
+import TinyDNS.Hosts                        ( mkDataHosts' )
+import TinyDNS.Types.MkTinyDNSData.Options  ( input, parseOptions )
+import TinyDNS.Types.Clean                  ( HasClean( clean ) )
 
 --------------------------------------------------------------------------------
-
-parseOptions ∷ AbsDir → OptParse.Parser Options
-parseOptions cwd =
-  let helpText = "don't delete intermediate files"
-   in Options ⊳ dryRunP
-              ⊵ verboseP
-              ⊵ argument (readAbsFile $ Just cwd) (metavar "HOSTS.dhall")
-              ⊵ flag Clean NoClean (long "no-clean" ⊕ help helpText)
-
--- | Perform some IO within a temporary directory freshly created by `mkTempDir`.
---   Cleans away the created directory when IO is complete.
 
 __loadFileYaml__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
 __loadFileYaml__ fn = liftIO $
   decodeEither' ⊳ readFile (toFilePath fn) ≫ either (error ∘ show) return
 
 __loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
-__loadFileDhall__ fn = liftIO $
---  Data.Text.IO.readFile (toFilePath fn) ≫ D.inputFrom (toFilePath fn) auto
-    Data.Text.IO.readFile (toFilePath fn) ≫ inputWithSettings (defaultInputSettings & sourceName ⊢ toFilePath fn & rootDirectory ⊢ toFilePath fn ⊣ directory) auto
+__loadFileDhall__ fn =
+  let baseDir       = rootDirectory ⊢ toFilePath fn ⊣ directory
+      inputSettings = defaultInputSettings & sourceName ⊢ toFilePath fn
+                                           & baseDir
+      inputDhall    = inputWithSettings inputSettings auto
+   in liftIO $ Data.Text.IO.readFile (toFilePath fn) ≫ inputDhall
 
 ----------------------------------------
 
@@ -143,7 +119,6 @@ main = do
              _        → dieUsage badExt
 
 
---  (t,es') ← exceptIOThrow ∘ flip runReaderT (RuntimeContext (opts ⊣ clean) hs) $ doProcIO @_ @_ @_ @_ @HostsDomainExecCreateIOError opts mkData
   (t,es') ← exceptIOThrow $ mkDataHosts' (opts ⊣ clean) hs opts
   putStr (toText t)
   forM_ (toTexts es') $ warn ∘ ("!ERROR: " ⊕)
