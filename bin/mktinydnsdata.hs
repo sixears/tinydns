@@ -18,11 +18,9 @@ import Prelude ( error )
 -- base --------------------------------
 
 import Control.Monad   ( forM_, return )
-import Data.Bifunctor  ( first )
-import Data.Either     ( Either, either )
-import Data.Function   ( ($), (&), id )
-import Data.Functor    ( fmap )
-import Data.String     ( String )
+import Data.Either     ( either )
+import Data.Function   ( ($), (&) )
+import Data.Maybe      ( Maybe( Just ) )
 import System.IO       ( IO )
 import Text.Show       ( Show( show ) )
 
@@ -50,8 +48,8 @@ import Fluffy.ErrTs          ( toTexts )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Options        ( optParser )
-import Fluffy.Path           ( AbsDir, AbsFile, RelFile
-                             , extension, getCwd_, parseFile' )
+import Fluffy.Path           ( AbsDir, extension, getCwd_ )
+import Fluffy.Path2          ( readAbsFile )
 
 -- hostsdb -----------------------------
 
@@ -72,12 +70,11 @@ import Data.MoreUnicode.Lens         ( (⊣), (⊢) )
 
 import qualified  Options.Applicative.Types  as  OptParse
 
-import Options.Applicative.Builder  ( ReadM, argument, eitherReader, flag, help
-                                    , long, metavar )
+import Options.Applicative.Builder  ( argument, flag, help, long, metavar )
 
 -- path --------------------------------
 
-import Path  ( File, Path, (</>), toFilePath )
+import Path  ( File, Path, toFilePath )
 
 -- proclib -----------------------------
 
@@ -88,7 +85,6 @@ import ProcLib.CommonOpt.Verbose  ( verboseP )
 
 import qualified  Data.Text.IO
 
-import Data.Text     ( pack )
 import Data.Text.IO  ( putStr )
 
 -- tfmt --------------------------------
@@ -111,22 +107,12 @@ import TinyDNS.Types.Clean    ( HasClean( clean )
 
 --------------------------------------------------------------------------------
 
-readAbsFile ∷ AbsDir → ReadM AbsFile
-readAbsFile cwd = eitherReader go
-                  where toLeft ∷ (β → α) → Either α β → α
-                        toLeft = either id
-                        eToAbs ∷ Either AbsFile RelFile → AbsFile
-                        eToAbs = toLeft (cwd </>)
-                        go ∷ String → Either String AbsFile
-                        go = first show ∘ fmap eToAbs ⊳ parseFile' ∘ pack
-
-
 parseOptions ∷ AbsDir → OptParse.Parser Options
 parseOptions cwd =
   let helpText = "don't delete intermediate files"
    in Options ⊳ dryRunP
               ⊵ verboseP
-              ⊵ argument (readAbsFile cwd) (metavar "HOSTS.dhall")
+              ⊵ argument (readAbsFile $ Just cwd) (metavar "HOSTS.dhall")
               ⊵ flag Clean NoClean (long "no-clean" ⊕ help helpText)
 
 -- | Perform some IO within a temporary directory freshly created by `mkTempDir`.

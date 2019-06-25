@@ -65,6 +65,7 @@ library
 
                     , Fluffy.ErrTs
                     , Fluffy.MonadIO.Error2
+                    , Fluffy.Path2
                     , Fluffy.Temp2
 
                     , HostsDB.Error.HostsError
@@ -94,9 +95,9 @@ library
   -- Other library packages from which modules are imported.
   build-depends:      aeson, base, base-unicode-symbols, containers
                     , data-default, data-textual, dhall, hashable, lens
-                    , mono-traversable, more-unicode, mtl, path, tasty
-                    , tasty-hunit, template-haskell, text, text-printer, unix
-                    , unordered-containers, yaml
+                    , mono-traversable, more-unicode, mtl, optparse-applicative
+                    , path, tasty, tasty-hunit, template-haskell, text
+                    , text-printer, unix, unordered-containers, yaml
 
                     , fluffy >= 0.2.8.0, proclib >= 3.1.1.1, tfmt
 
