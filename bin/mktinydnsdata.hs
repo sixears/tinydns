@@ -43,6 +43,7 @@ import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
 
 -- fluffy ------------------------------
 
+import Fluffy.Dhall          ( tryDhall )
 import Fluffy.ErrTs          ( toTexts )
 import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
@@ -97,11 +98,13 @@ __loadFileYaml__ fn = liftIO $
 
 __loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
 __loadFileDhall__ fn =
-  let baseDir       = rootDirectory ⊢ toFilePath fn ⊣ directory
-      inputSettings = defaultInputSettings & sourceName ⊢ toFilePath fn
-                                           & baseDir
+  let baseDir       = toFilePath fn ⊣ directory
+      inputSettings = defaultInputSettings & sourceName    ⊢ toFilePath fn
+                                           & rootDirectory ⊢ baseDir
       inputDhall    = inputWithSettings inputSettings auto
    in liftIO $ Data.Text.IO.readFile (toFilePath fn) ≫ inputDhall
+
+-- loadFile ∷ (AsIOError ε, MonadError ε μ, MonadIO μ) ⇒ Path β File → μ Hosts
 
 ----------------------------------------
 
