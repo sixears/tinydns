@@ -39,6 +39,10 @@ import Data.Function.Unicode  ( (∘) )
 
 import Data.Textual  ( Printable( print ), toText )
 
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
+
 -- dhall -------------------------------
 
 import qualified  Dhall  as  D
@@ -122,7 +126,7 @@ import DomainNames.Error.DomainLabelError
 ------------------------------------------------------------
 
 newtype DomainLabel = DomainLabel Text
-  deriving (Eq, Hashable, Ord, Show)
+  deriving (Eq, Hashable, NFData, Ord, Show)
 
 instance Printable DomainLabel where
   print (DomainLabel dl) = P.text dl
@@ -173,7 +177,7 @@ class IsDomainLabels δ where
                      (view (from domainLabels) ∘ view (from dLabels))
 
 newtype DomainLabels = DomainLabels { unDomainLabels ∷ NonEmpty DomainLabel }
-  deriving (Eq, Hashable, Ord, Show)
+  deriving (Eq, Hashable, NFData, Ord, Show)
 
 instance IsDomainLabels DomainLabels where
   domainLabels = id

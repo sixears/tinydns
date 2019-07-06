@@ -31,13 +31,17 @@ import Data.Eq.Unicode        ( (≡) )
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
 
--- dhall -------------------------------
-
-import Dhall  ( Interpret( autoWith ), Type, auto, field, record, strictText )
-
 -- data-textual ------------------------
 
 import Data.Textual  ( Printable( print ), toText )
+
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
+
+-- dhall -------------------------------
+
+import Dhall  ( Interpret( autoWith ), Type, auto, field, record, strictText )
 
 -- domainnames -------------------------
 
@@ -48,8 +52,8 @@ import DomainNames.Hostname  ( Hostname )
 import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Equalish     ( Equalish( (≏) ) )
 import Fluffy.Functor      ( (⊳) )
-import Fluffy.IP4          ( IP4 )
-import Fluffy.MACAddress   ( MACAddress )
+import Fluffy.IP42         ( IP4 )
+import Fluffy.MACAddress2  ( MACAddress )
 import Fluffy.Printable    ( parenthesize )
 
 -- lens --------------------------------
@@ -77,7 +81,7 @@ import Text.Fmt  ( fmt, fmtT )
 --------------------------------------------------------------------------------
 
 newtype HostDesc = HostDesc { unHostDesc ∷ Text }
-  deriving (Eq, FromJSON, Generic, Show)
+  deriving (Eq, FromJSON, Generic, NFData, Show)
 
 instance Printable HostDesc where
   print = print ∘ unHostDesc
@@ -91,7 +95,7 @@ instance Interpret HostDesc where
 ------------------------------------------------------------
 
 newtype HostComment = HostComment { unHostComment ∷ Text }
-  deriving (Eq, FromJSON, Generic, Show)
+  deriving (Eq, FromJSON, Generic, NFData, Show)
 
 instance Printable HostComment where
   print = print ∘ unHostComment
@@ -110,7 +114,7 @@ data Host = Host { _hname    ∷ Hostname
                  , _comments ∷ [HostComment]
                  , _mac      ∷ Maybe MACAddress
                  }
-  deriving (Eq, FromJSON, Generic, Show)
+  deriving (Eq, FromJSON, Generic, NFData, Show)
 
 hname    ∷ Lens' Host Hostname
 hname    = lens _hname (\ h n → h { _hname = n })

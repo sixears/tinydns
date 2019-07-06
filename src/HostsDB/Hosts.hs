@@ -2,13 +2,14 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE UnicodeSyntax     #-}
 
 module HostsDB.Hosts
   ( Domains( Domains ), HasHosts( hosts ), Hosts( Hosts )
   , aliases, aliasHosts, dnsServers, domains, hostsHosts, hostIPs
-  , hostIPv4, hostIPv4', hostIPv4s, inAddr, lhostmap, lookupHost, lookupHost'
-  , mailServers, subDomain
+  , hostIPv4, hostIPv4', hostIPv4s, inAddr, lhostmap, loadFile, loadFile'
+  , lookupHost, lookupHost', mailServers, subDomain
   )
 where
 
@@ -18,15 +19,16 @@ import Data.Aeson.Types  ( FromJSON )
 
 -- base --------------------------------
 
-import Control.Monad  ( return )
-import Data.Eq        ( Eq )
-import Data.Function  ( ($), id )
-import Data.Functor   ( fmap )
-import Data.List      ( intercalate )
-import Data.Maybe     ( maybe )
-import Data.Tuple     ( swap )
-import GHC.Generics   ( Generic )
-import Text.Show      ( Show( show ) )
+import Control.Monad           ( return )
+import Control.Monad.IO.Class  ( MonadIO )
+import Data.Eq                 ( Eq )
+import Data.Function           ( ($), id )
+import Data.Functor            ( fmap )
+import Data.List               ( intercalate )
+import Data.Maybe              ( maybe )
+import Data.Tuple              ( swap )
+import GHC.Generics            ( Generic )
+import Text.Show               ( Show( show ) )
 
 -- base-unicode-symbols ----------------
 
@@ -36,6 +38,10 @@ import Data.Monoid.Unicode    ( (⊕) )
 -- containers --------------------------
 
 import qualified  Data.Map  as  Map
+
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
 
 -- dhall -------------------------------
 
@@ -52,9 +58,12 @@ import DomainNames.Hostname  ( Hostname, Localname, filterWL )
 import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Containers.NonEmptyHashSet
                            ( NonEmptyHashSet )
+import Fluffy.Dhall        ( parseFile )
+import Fluffy.Dhall.Error  ( AsDhallError, DhallIOError )
 import Fluffy.ErrTs        ( ErrTs )
 import Fluffy.Functor      ( (⊳) )
-import Fluffy.IP4          ( IP4 )
+import Fluffy.IO.Error     ( AsIOError )
+import Fluffy.IP42         ( IP4 )
 import Fluffy.MapUtils     ( fromListWithDups )
 import Fluffy.MonadError   ( mapMError )
 
@@ -71,6 +80,10 @@ import Control.Monad.Except  ( MonadError )
 
 import Data.MoreUnicode.Lens     ( (⊣) )
 import Data.MoreUnicode.Monoid2  ( ю )
+
+-- path --------------------------------
+
+import Path  ( File, Path )
 
 -- unordered-containers ----------------
 
@@ -97,7 +110,7 @@ class HasINAddr α where
 ------------------------------------------------------------
 
 data Domains = Domains { _subDomain ∷ FQDN, _inAddr ∷ FQDN }
-  deriving (Eq, FromJSON, Generic, Show)
+  deriving (Eq, FromJSON, Generic, NFData, Show)
 
 instance HasSubDomain Domains where
   subDomain = lens _subDomain (\ d s → d { _subDomain = s })
@@ -117,7 +130,7 @@ data Hosts = Hosts { _domains      ∷ Domains
                    , _mailServers  ∷ [Localname]
                    , _aliases      ∷ LocalnameMap
                    }
-  deriving (Eq, FromJSON, Generic)
+  deriving (Eq, FromJSON, Generic, NFData)
 
 class HasHosts α where
   hosts ∷ Lens' α Hosts
@@ -218,5 +231,17 @@ hostIPs hs =
       hostList = swap ⊳ ю [ Map.toList hostsByIP
                           , Map.toList filteredDups ]
    in (hostList, es)
+
+----------------------------------------
+
+loadFile ∷ (AsDhallError ε, AsIOError ε, MonadError ε μ, MonadIO μ) ⇒
+           Path β File -> μ Hosts
+
+loadFile = parseFile @_ @_ @Hosts
+
+--------------------
+
+loadFile' ∷ (MonadError DhallIOError μ, MonadIO μ) ⇒ Path β File -> μ Hosts
+loadFile' = loadFile
 
 -- that's all, folks! ----------------------------------------------------------

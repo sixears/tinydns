@@ -36,7 +36,7 @@ import DomainNames.Hostname  ( Hostname )
 -- fluffy ------------------------------
 
 import Fluffy.IO.Error      ( AsIOError )
-import Fluffy.IP4           ( IP4 )
+import Fluffy.IP42          ( IP4 )
 import Fluffy.MonadIO       ( unlink_ )
 import Fluffy.MonadIO.File  ( readFile, writeFile )
 import Fluffy.Path          ( parseAbsFile_ )

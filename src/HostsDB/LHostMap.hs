@@ -1,9 +1,10 @@
-{-# LANGUAGE InstanceSigs      #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE UnicodeSyntax     #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs               #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UnicodeSyntax              #-}
 
 module HostsDB.LHostMap
   ( LHostMap( LHostMap ), LocalHostRelation( LocalHostRelation, lname, lhost )
@@ -33,6 +34,10 @@ import Data.Monoid.Unicode    ( (∅), (⊕) )
 -- data-textual ------------------------
 
 import Data.Textual  ( Printable( print ), toString )
+
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
 
 -- dhall -------------------------------
 
@@ -91,7 +96,7 @@ import HostsDB.Host  ( Host, hname, hostType )
 --------------------------------------------------------------------------------
 
 newtype LHostMap = LHostMap { unLHostMap ∷ HashMap.HashMap Localname Host }
-  deriving (Eq, Show)
+  deriving (Eq, NFData, Show)
 
 instance HasLength LHostMap where
   length = length ∘ unLHostMap

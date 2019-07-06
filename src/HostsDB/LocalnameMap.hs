@@ -1,10 +1,11 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE InstanceSigs      #-}
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
-{-# LANGUAGE TypeFamilies      #-}
-{-# LANGUAGE UnicodeSyntax     #-}
+{-# LANGUAGE FlexibleContexts            #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving  #-}
+{-# LANGUAGE InstanceSigs                #-}
+{-# LANGUAGE LambdaCase                  #-}
+{-# LANGUAGE OverloadedStrings           #-}
+{-# LANGUAGE QuasiQuotes                 #-}
+{-# LANGUAGE TypeFamilies                #-}
+{-# LANGUAGE UnicodeSyntax               #-}
 
 module HostsDB.LocalnameMap
   ( LocalnameMap( LocalnameMap ), LocalNameRelation( lfrom, lto ), unLHMap )
@@ -33,6 +34,10 @@ import Data.Monoid.Unicode    ( (∅), (⊕) )
 -- data-textual ------------------------
 
 import Data.Textual  ( Printable( print ), toString )
+
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
 
 -- dhall -------------------------------
 
@@ -87,7 +92,7 @@ import qualified  Data.Yaml  as  Yaml
 
 newtype LocalnameMap =
     LocalnameMap { unLHMap ∷ HashMap.HashMap Localname Localname }
-  deriving (Eq, Show)
+  deriving (Eq, NFData, Show)
 
 data LocalNameRelation =
     LocalNameRelation { lfrom ∷ Localname, lto ∷ Localname }

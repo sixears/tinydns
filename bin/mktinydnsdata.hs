@@ -1,86 +1,57 @@
 {-# OPTIONS_GHC -Wall #-}
 
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE QuasiQuotes           #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE UnicodeSyntax         #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UnicodeSyntax     #-}
 
 -- !!! Cleanup Temp Files !!!
 -- !!! REWRITE Fluffy.TempFile TO NOT USE LAZY IO !!!
 
-import Prelude ( error )
-
 -- base --------------------------------
 
-import Control.Monad   ( forM_, return )
-import Data.Either     ( either )
-import Data.Function   ( ($), (&) )
-import System.IO       ( IO )
-import Text.Show       ( Show( show ) )
+import Control.Monad           ( forM_, return )
+import Control.Monad.IO.Class  ( MonadIO )
+import Data.Function           ( ($) )
+import Data.Word               ( Word8 )
+import System.IO               ( Handle, IO, stdout )
 
 -- base-unicode-symbols ----------------
 
 import Data.Function.Unicode  ( (∘) )
 import Data.Monoid.Unicode    ( (⊕) )
 
--- bytestring --------------------------
-
-import Data.ByteString  ( readFile )
-
 -- data-textual ------------------------
 
-import Data.Textual  ( toText )
-
--- dhall -------------------------------
-
-import Dhall  ( auto, defaultInputSettings, inputWithSettings, rootDirectory
-              , sourceName )
+import Data.Textual  ( Printable, toText )
 
 -- fluffy ------------------------------
 
-import Fluffy.Dhall          ( tryDhall )
+import Fluffy.Dhall.Error    ( AsDhallError, DhallIOError )
 import Fluffy.ErrTs          ( toTexts )
-import Fluffy.MonadIO        ( MonadIO, dieUsage, liftIO, warn )
+import Fluffy.IO.Error       ( AsIOError )
+import Fluffy.Main           ( doMain )
+import Fluffy.MonadError.IO  ( asIOError )
+import Fluffy.MonadIO        ( warn )
 import Fluffy.MonadIO.Error  ( exceptIOThrow )
 import Fluffy.Options        ( optParser )
-import Fluffy.Path           ( extension, getCwd_ )
+import Fluffy.Path           ( getCwd_ )
 
 -- hostsdb -----------------------------
 
-import HostsDB.Hosts  ( Hosts )
-
--- lens --------------------------------
-
-import System.FilePath.Lens  ( directory )
+import HostsDB.Hosts  ( loadFile )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Functor  ( (⊳) )
-import Data.MoreUnicode.Monad    ( (≫) )
-import Data.MoreUnicode.Lens     ( (⊣), (⊢) )
+import Data.MoreUnicode.Lens  ( (⊣) )
 
--- path --------------------------------
+-- mtl ---------------------------------
 
-import Path  ( File, Path, toFilePath )
+import Control.Monad.Except  ( MonadError )
 
 -- text --------------------------------
 
-import qualified  Data.Text.IO
-
-import Data.Text.IO  ( putStr )
-
--- tfmt --------------------------------
-
-import Text.Fmt  ( fmtT )
-
--- yaml --------------------------------
-
-import Data.Yaml  ( decodeEither' )
+import Data.Text.IO  ( hPutStr )
 
 ------------------------------------------------------------
 --                     local imports                      --
@@ -92,38 +63,31 @@ import TinyDNS.Types.Clean                  ( HasClean( clean ) )
 
 --------------------------------------------------------------------------------
 
-__loadFileYaml__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
-__loadFileYaml__ fn = liftIO $
-  decodeEither' ⊳ readFile (toFilePath fn) ≫ either (error ∘ show) return
+write ∷ (Printable τ, AsIOError ε, MonadError ε μ, MonadIO μ) ⇒
+        Handle → τ → μ ()
+write h = asIOError ∘ hPutStr h ∘ toText
 
-__loadFileDhall__ ∷ MonadIO μ ⇒ Path β File → μ Hosts
-__loadFileDhall__ fn =
-  let baseDir       = toFilePath fn ⊣ directory
-      inputSettings = defaultInputSettings & sourceName    ⊢ toFilePath fn
-                                           & rootDirectory ⊢ baseDir
-      inputDhall    = inputWithSettings inputSettings auto
-   in liftIO $ Data.Text.IO.readFile (toFilePath fn) ≫ inputDhall
+writeOut ∷ (Printable τ, AsIOError ε, MonadError ε μ, MonadIO μ) ⇒ τ → μ ()
+writeOut = write stdout
 
--- loadFile ∷ (AsIOError ε, MonadError ε μ, MonadIO μ) ⇒ Path β File → μ Hosts
-
-----------------------------------------
-
-main ∷ IO ()
-main = do
+__main__ ∷ (MonadIO μ, AsIOError ε, AsDhallError ε, MonadError ε μ) ⇒ μ Word8
+__main__ = do
   cwd  ← getCwd_
   opts ← optParser "make tiny dns data from hosts config" (parseOptions cwd)
 
-  let infn = opts ⊣ input
-      ext  = infn ⊣ extension
-  hs ← let badExt = [fmtT|file ext not recognized: '%t'|] ext
-        in case ext of
-             ".yaml"  → __loadFileYaml__  (opts ⊣ input)
-             ".dhall" → __loadFileDhall__ (opts ⊣ input)
-             _        → dieUsage badExt
+  hs ← loadFile (opts ⊣ input)
 
+  (t,es) ← exceptIOThrow $ mkDataHosts' (opts ⊣ clean) hs opts
+  writeOut (toText t)
+  forM_ (toTexts es) $ warn ∘ ("!ERROR: " ⊕)
+  return 0
 
-  (t,es') ← exceptIOThrow $ mkDataHosts' (opts ⊣ clean) hs opts
-  putStr (toText t)
-  forM_ (toTexts es') $ warn ∘ ("!ERROR: " ⊕)
+__main'__  ∷ (MonadIO μ, MonadError DhallIOError μ) ⇒ μ Word8
+__main'__ = __main__
+
+-- --help pre-defined to fail 2 (special helper, parser, etc.)
+
+main ∷ IO ()
+main = doMain __main'__
 
 -- that's all, folks! ----------------------------------------------------------

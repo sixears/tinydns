@@ -35,6 +35,10 @@ import Data.Monoid.Unicode    ( (⊕) )
 
 import Data.Textual  ( Printable( print ), toString, toText )
 
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
+
 -- dhall -------------------------------
 
 import Dhall  ( Interpret( autoWith ) )
@@ -95,7 +99,7 @@ import DomainNames.Error.FQDNError    ( AsFQDNError
 --------------------------------------------------------------------------------
 
 newtype FQDN = FQDN { unFQDN ∷ DomainLabels }
-  deriving (Eq, Hashable, Ord, Show)
+  deriving (Eq, Hashable, NFData, Ord, Show)
 
 instance IsDomainLabels FQDN where
   domainLabels = iso unFQDN FQDN

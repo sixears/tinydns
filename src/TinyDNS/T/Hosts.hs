@@ -39,8 +39,8 @@ import DomainNames.Hostname  ( hostname, localname )
 -- fluffy ------------------------------
 
 import Fluffy.ErrTs       ( ErrTs, toTexts )
-import Fluffy.IP4         ( ip4 )
-import Fluffy.MACAddress  ( mac )
+import Fluffy.IP42        ( ip4 )
+import Fluffy.MACAddress2 ( mac )
 import Fluffy.MonadError  ( splitMError )
 import Fluffy.Nat         ( One )
 import Fluffy.Tasty       ( assertListEq, runTestsP_ )

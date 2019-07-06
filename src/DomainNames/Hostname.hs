@@ -50,6 +50,10 @@ import Data.Map  ( mapAccumWithKey )
 
 import Data.Textual  ( Printable( print ), toString, toText )
 
+-- deepseq -----------------------------
+
+import Control.DeepSeq  ( NFData )
+
 -- dhall -------------------------------
 
 import Dhall  ( Interpret( autoWith ) )
@@ -61,7 +65,7 @@ import Fluffy.Containers.NonEmptyHashSet
 import Fluffy.Either   ( __right )
 import Fluffy.ErrTs    ( ErrTs, errT )
 import Fluffy.Functor  ( (⊳) )
-import Fluffy.IP4      ( IP4 )
+import Fluffy.IP42     ( IP4 )
 import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 -- hashable ----------------------------
@@ -121,7 +125,7 @@ import DomainNames.Error.HostnameError
 --------------------------------------------------------------------------------
 
 newtype Localname = Localname DomainLabel
-  deriving (Eq,Generic,Hashable,Show)
+  deriving (Eq, Generic, Hashable, NFData, Show)
 
 instance Interpret Localname where
   autoWith iopts = __parseLocalname' ⊳ autoWith iopts
@@ -155,7 +159,7 @@ localname = let parseExp ∷ String → ExpQ
 ------------------------------------------------------------
 
 newtype Hostname = Hostname { unHostname ∷ FQDN }
-  deriving (Eq, Generic, Hashable, Ord, Show)
+  deriving (Eq, Generic, Hashable, NFData, Ord, Show)
 
 instance Printable Hostname where
   print (Hostname fq) = print fq

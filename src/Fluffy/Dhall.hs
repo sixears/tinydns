@@ -6,7 +6,8 @@
 {-# LANGUAGE UnicodeSyntax       #-}
 
 module Fluffy.Dhall
-  ( parse, parse', parseT, parseT', parseFile, parseFileT, parseFileTS
+  ( parse, parse', parseT, parseT'
+  , parseFile, parseFile', parseFileT, parseFileT', parseFileTS, parseFileTS'
   , tryDhall, tryDhall' )
 where
 
@@ -65,7 +66,8 @@ import Data.Text  ( Text )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import Fluffy.Dhall.Error    ( AsDhallError, DhallError, mkDhallError )
+import Fluffy.Dhall.Error    ( AsDhallError, DhallError, DhallIOError
+                             , mkDhallError )
 import Fluffy.IO.Error       ( AsIOError )
 import Fluffy.MonadError     ( mapMError )
 import Fluffy.MonadIO.File2  ( readFileUTF8 )
@@ -108,6 +110,14 @@ parseFile ∷ (AsDhallError ε, AsIOError ε, MonadError ε μ, MonadIO μ,
             Path β File → μ α
 parseFile = parseFileT Dhall.auto
 
+--------------------
+
+parseFile' ∷ (MonadError DhallIOError μ, MonadIO μ, NFData α, Interpret α) ⇒
+             Path β File → μ α
+parseFile' = parseFile
+
+----------------------------------------
+
 parseFileT ∷ (AsDhallError ε, AsIOError ε, MonadError ε μ,
               MonadIO μ, NFData α) ⇒
              Dhall.Type α → Path β File → μ α
@@ -117,10 +127,26 @@ parseFileT t fn =
                                            & rootDirectory ⊢ baseDir
    in parseFileTS inputSettings t fn
 
+--------------------
+
+parseFileT' ∷ (MonadError DhallIOError μ, MonadIO μ, NFData α) ⇒
+             Dhall.Type α → Path β File → μ α
+
+parseFileT' = parseFileT
+
+----------------------------------------
+
 {- | parse a Dhall file, specifying the expected type, and input settings -}
 parseFileTS ∷ (AsDhallError ε, AsIOError ε, MonadError ε μ,
               MonadIO μ, NFData α) ⇒
              InputSettings → Dhall.Type α → Path β File → μ α
 parseFileTS s t fn = readFileUTF8 fn ≫ tryDhall ∘ inputWithSettings s t
+
+--------------------
+
+parseFileTS' ∷ (MonadError DhallIOError μ, MonadIO μ, NFData α) ⇒
+               InputSettings → Dhall.Type α → Path β File → μ α
+parseFileTS' = parseFileTS
+
 
 -- that's all, folks! ----------------------------------------------------------
