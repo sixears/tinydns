@@ -7,10 +7,12 @@
 
 module Fluffy.Dhall.Error
   ( AsDhallError( _DhallError )
+  , AsDhallIOError( _DhallIOError )
   , AsDhallParseError( _DhallParseError )
   , AsDhallSomeError( _DhallSomeError )
   , AsDhallTypeSrcError( _DhallTypeSrcError )
   , DhallError, DhallIOError
+  , _DIEDhallError, _DIEIOError
   , mkDhallError, mkDhallError'
   , mkDhallIOError, mkDhallIOError'
   )
@@ -118,7 +120,7 @@ instance Eq DhallError where
 
 class AsDhallError ε where
   _DhallError ∷ Prism' ε DhallError
-  
+
 instance AsDhallError DhallError where
   _DhallError = id
 
@@ -129,6 +131,13 @@ data DhallIOError = DIEDhallError DhallError
   deriving Show
 
 instance Exception DhallIOError
+
+_DIEDhallError ∷ Prism' DhallIOError DhallError
+_DIEDhallError = prism DIEDhallError
+                       (\ case DIEDhallError e → Right e; e → Left e)
+
+_DIEIOError ∷ Prism' DhallIOError IOError
+_DIEIOError = prism DIEIOError (\ case DIEIOError e → Right e; e → Left e)
 
 --------------------
 
@@ -169,7 +178,7 @@ instance Eq DhallIOError where
 
 class AsDhallIOError ε where
   _DhallIOError ∷ Prism' ε DhallIOError
-  
+
 instance AsDhallIOError DhallIOError where
   _DhallIOError = id
 
