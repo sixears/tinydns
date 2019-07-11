@@ -46,7 +46,7 @@ import Control.Lens.Getter   ( view )
 import Data.MoreUnicode.Functor  ( (⊳) )
 import Data.MoreUnicode.Lens     ( (⊣) )
 import Data.MoreUnicode.Monad    ( (≫) )
-import Data.MoreUnicode.Monoid2  ( ф )
+import Data.MoreUnicode.Monoid   ( ф )
 
 -- mtl ---------------------------------
 

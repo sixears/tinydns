@@ -79,8 +79,8 @@ import Control.Lens.Iso     ( from, iso )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Monoid2  ( ф )
-import Data.MoreUnicode.Lens     ( (⊣) )
+import Data.MoreUnicode.Monoid  ( ф )
+import Data.MoreUnicode.Lens    ( (⊣) )
 
 -- mtl ---------------------------------
 

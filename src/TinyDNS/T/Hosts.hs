@@ -58,7 +58,7 @@ import Control.Lens.Lens  ( Lens', lens )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Monoid2  ( ю )
+import Data.MoreUnicode.Monoid  ( ю )
 
 -- proclib -----------------------------
 

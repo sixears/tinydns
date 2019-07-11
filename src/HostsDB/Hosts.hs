@@ -78,8 +78,8 @@ import Control.Monad.Except  ( MonadError )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Lens     ( (⊣) )
-import Data.MoreUnicode.Monoid2  ( ю )
+import Data.MoreUnicode.Lens    ( (⊣) )
+import Data.MoreUnicode.Monoid  ( ю )
 
 -- path --------------------------------
 

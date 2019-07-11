@@ -48,7 +48,7 @@ import Data.Text.Encoding.Error  ( lenientDecode )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Functor2  ( (⩺) )
+import Data.MoreUnicode.Functor  ( (⩺) )
 
 ------------------------------------------------------------
 --                     local imports                      --

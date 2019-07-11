@@ -46,9 +46,9 @@ import System.FilePath.Lens  ( directory )
 
 -- more-unicode ------------------------
 
-import Data.MoreUnicode.Functor2  ( (⩺) )
-import Data.MoreUnicode.Monad     ( (≫) )
-import Data.MoreUnicode.Lens      ( (⊣), (⊢) )
+import Data.MoreUnicode.Functor  ( (⩺) )
+import Data.MoreUnicode.Monad    ( (≫) )
+import Data.MoreUnicode.Lens     ( (⊣), (⊢) )
 
 -- mtl ---------------------------------
 
