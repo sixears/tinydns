@@ -38,7 +38,7 @@ import DomainNames.Hostname  ( Hostname )
 import Fluffy.IO.Error      ( AsIOError )
 import Fluffy.IP4           ( IP4 )
 import Fluffy.MonadIO       ( unlink_ )
-import Fluffy.MonadIO.File  ( readFile, writeFile )
+import Fluffy.MonadIO.File  ( readFileUTF8, writeFileUtf8 )
 import Fluffy.Path          ( parseAbsFile_ )
 import Fluffy.TempFile      ( mktempf )
 
@@ -94,9 +94,9 @@ tinydnsEdit args intxt = do
         tmp2 = parseAbsFile_ tmpfn2
     return (tmp1,tmp2)
 
-  mkIO ([fmt|write: %T|] tmp1) $ writeFile tmp1 (toText intxt)
+  mkIO ([fmt|write: %T|] tmp1) $ writeFileUtf8 tmp1 (toText intxt)
   mkProc_ @_ @() $ CmdSpec Paths.tinydns_edit ([toText tmp1,toText tmp2] ⊕ args)
-  outtxt ← mkIO ([fmt|read: %T|] tmp1) $ readFile tmp1
+  outtxt ← mkIO ([fmt|read: %T|] tmp1) $ readFileUTF8 tmp1
 
   -- tmp2 is auto-deleted by tinydns-data
   when (cl ≡ Clean) $
