@@ -63,7 +63,7 @@ import Fluffy.Dhall.Error  ( AsDhallError, DhallIOError )
 import Fluffy.ErrTs        ( ErrTs )
 import Fluffy.Functor      ( (⊳) )
 import Fluffy.IO.Error     ( AsIOError )
-import Fluffy.IP42         ( IP4 )
+import Fluffy.IP4          ( IP4 )
 import Fluffy.MapUtils     ( fromListWithDups )
 import Fluffy.MonadError   ( mapMError )
 

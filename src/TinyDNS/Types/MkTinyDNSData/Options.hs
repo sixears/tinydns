@@ -21,8 +21,7 @@ import Data.Monoid.Unicode    ( (⊕) )
 -- fluffy ------------------------------
 
 import Fluffy.Nat    ( One )
-import Fluffy.Path   ( AbsDir, AbsFile )
-import Fluffy.Path2  ( readAbsFile )
+import Fluffy.Path   ( AbsDir, AbsFile, readAbsFile )
 
 -- lens --------------------------------
 

@@ -8,6 +8,7 @@ where
 
 -- base --------------------------------
 
+import Control.Monad  ( return )
 import Data.Function  ( ($) )
 import Data.Maybe     ( Maybe( Just ) )
 import Data.String    ( String )
@@ -32,8 +33,8 @@ import DomainNames.Hostname  ( hostname, localname )
 -- fluffy ------------------------------
 
 import Fluffy.Functor     ( (⊳) )
-import Fluffy.IP42        ( ip4 )
-import Fluffy.MACAddress2 ( macAddress )
+import Fluffy.IP4         ( ip4 )
+import Fluffy.MACAddress  ( macAddress )
 import Fluffy.Tasty       ( assertListEqIO, runTestsP_, withResource' )
 
 -- lens --------------------------------
@@ -172,6 +173,8 @@ _test ∷ IO ()
 _test = defaultMain tests
 
 _tests ∷ String → IO ()
-_tests p = runTestsP_ tests p
+_tests p = do
+  _ ← runTestsP_ tests p
+  return ()
 
 -- that's all, folks! ----------------------------------------------------------

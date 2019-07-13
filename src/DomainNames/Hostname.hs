@@ -65,7 +65,7 @@ import Fluffy.Containers.NonEmptyHashSet
 import Fluffy.Either   ( __right )
 import Fluffy.ErrTs    ( ErrTs, errT )
 import Fluffy.Functor  ( (⊳) )
-import Fluffy.IP42     ( IP4 )
+import Fluffy.IP4      ( IP4 )
 import Fluffy.Quasi    ( mkQuasiQuoterExp )
 
 -- hashable ----------------------------

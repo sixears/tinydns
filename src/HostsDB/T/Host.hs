@@ -8,6 +8,7 @@ where
 
 -- base --------------------------------
 
+import Control.Monad  ( return )
 import Data.Maybe     ( Maybe( Just, Nothing ) )
 import Data.String    ( String )
 import System.IO      ( IO )
@@ -25,8 +26,8 @@ import Dhall  ( auto )
 -- fluffy ------------------------------
 
 import Fluffy.Equalish    ( (≏) )
-import Fluffy.IP42        ( ip4 )
-import Fluffy.MACAddress2 ( macAddress )
+import Fluffy.IP4         ( ip4 )
+import Fluffy.MACAddress  ( macAddress )
 import Fluffy.Tasty       ( (≟), ioTests, runTestsP_, withResource' )
 
 -- tasty -------------------------------
@@ -73,6 +74,8 @@ _test ∷ IO ()
 _test = defaultMain tests
 
 _tests ∷ String → IO ()
-_tests p = runTestsP_ tests p
+_tests p = do
+  _ ← runTestsP_ tests p
+  return ()
 
 -- that's all, folks! ----------------------------------------------------------

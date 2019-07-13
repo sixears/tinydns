@@ -12,6 +12,7 @@ where
 
 -- base --------------------------------
 
+import Control.Monad  ( return )
 import Data.Either    ( Either( Left, Right ) )
 import Data.Function  ( ($) )
 import Data.Maybe     ( Maybe( Just ) )
@@ -39,8 +40,8 @@ import DomainNames.Hostname  ( hostname, localname )
 -- fluffy ------------------------------
 
 import Fluffy.ErrTs       ( ErrTs, toTexts )
-import Fluffy.IP42        ( ip4 )
-import Fluffy.MACAddress2 ( mac )
+import Fluffy.IP4         ( ip4 )
+import Fluffy.MACAddress  ( mac )
 import Fluffy.MonadError  ( splitMError )
 import Fluffy.Nat         ( One )
 import Fluffy.Tasty       ( assertListEq, runTestsP_ )
@@ -187,7 +188,7 @@ _test = do
 _tests ∷ String → IO ()
 _tests p = do
   hs ← splitMError $ mkDataHosts' @_ @Options Clean testHosts def
-  runTestsP_ (tests hs) p
-
+  _ ← runTestsP_ (tests hs) p
+  return ()
 
 -- that's all, folks! ----------------------------------------------------------

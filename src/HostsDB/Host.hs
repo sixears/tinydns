@@ -52,8 +52,8 @@ import DomainNames.Hostname  ( Hostname )
 import Fluffy.Applicative  ( (⊵) )
 import Fluffy.Equalish     ( Equalish( (≏) ) )
 import Fluffy.Functor      ( (⊳) )
-import Fluffy.IP42         ( IP4 )
-import Fluffy.MACAddress2  ( MACAddress )
+import Fluffy.IP4          ( IP4 )
+import Fluffy.MACAddress   ( MACAddress )
 import Fluffy.Printable    ( parenthesize )
 
 -- lens --------------------------------

@@ -28,13 +28,13 @@ import DomainNames.Error.DomainError  ( AsDomainError )
 
 -- fluffy ------------------------------
 
-import Fluffy.Dhall.Error    ( AsDhallError )
-import Fluffy.ErrTs          ( toTexts )
-import Fluffy.IO.Error       ( AsIOError )
-import Fluffy.Main           ( doMain )
-import Fluffy.MonadIO2       ( warn, writeOut )
-import Fluffy.Options2       ( parseOpts )
-import Fluffy.Path           ( getCwd_ )
+import Fluffy.Dhall.Error  ( AsDhallError )
+import Fluffy.ErrTs        ( toTexts )
+import Fluffy.IO.Error     ( AsIOError )
+import Fluffy.Main         ( doMain )
+import Fluffy.MonadIO      ( warn, writeOut )
+import Fluffy.Options      ( parseOpts )
+import Fluffy.Path         ( getCwd_ )
 
 -- hostsdb -----------------------------
 
