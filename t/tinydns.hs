@@ -47,9 +47,6 @@ import Test.Tasty  ( TestTree, testGroup )
 --                     local imports                      --
 ------------------------------------------------------------
 
-import qualified  Fluffy.T.MACAddress
-import qualified  HostsDB.T.Host
-import qualified  HostsDB.T.Hosts
 import qualified  TinyDNS.T.Hosts
 
 import TinyDNS.Hosts              ( mkDataHosts' )
@@ -82,11 +79,7 @@ instance HasVerboseLevel One Options where
 
 tests ∷ Either HostsDomainExecCreateIOError (TinyDNSData,ErrTs) → TestTree
 
-tests hs = testGroup "tinydns" [ Fluffy.T.MACAddress.tests
-                               , HostsDB.T.Host.tests
-                               , HostsDB.T.Hosts.tests
-                               , TinyDNS.T.Hosts.tests hs
-                               ]
+tests hs = testGroup "tinydns" [ TinyDNS.T.Hosts.tests hs ]
 
 main ∷ IO ()
 main = do
