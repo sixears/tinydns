@@ -1,3 +1,8 @@
+0.1.1.0 2019-07-14
+==================
+- massive cleanup, and factor out into upgrades to more-unicode-0.0.6.0,
+  fluffy-0.2.13.0, domainnames-0.1.0.0, hostsdb-0.1.0.0
+
 0.1.0.4 2019-06-01
 ==================
 - make failures such as IP dups into printed errors that do not prevent continuation
