@@ -7,7 +7,7 @@
 
 module TinyDNS.Hosts
   ( {- | integration of tinydns cmds with HostsDB -}
-    mkAliasCmds, mkData, mkDataHosts, mkDataHosts', mkMxCmds, mkNSCmds
+    mkAliasCmds, mkData, mkDataHosts, mkMxCmds, mkNSCmds
   )
 where
 
@@ -21,15 +21,13 @@ import Data.Function  ( ($), flip )
 import DomainNames.Error.DomainError  ( AsDomainError )
 import DomainNames.Hostname           ( (<..>) )
 
--- fluffy ------------------------------
+-- fpath -------------------------------
 
-import Fluffy.ErrTs     ( ErrTs )
-import Fluffy.IO.Error  ( AsIOError )
-import Fluffy.MonadIO   ( MonadIO )
+import FPath.Error.FPathError  ( AsFPathError )
 
 -- hostsdb -----------------------------
 
-import HostsDB.Error.HostsError  ( AsHostsError, HostsDomainExecCreateIOError )
+import HostsDB.Error.HostsError  ( AsHostsError )
 import HostsDB.Host              ( hname, ipv4 )
 import HostsDB.Hosts             ( HasHosts
                                  , aliasHosts, dnsServers, hosts, hostIPs
@@ -41,12 +39,21 @@ import HostsDB.Hosts             ( HasHosts
 
 import Control.Lens.Getter   ( view )
 
+-- monaderror-io -----------------------
+
+import MonadError.IO.Error  ( AsIOError )
+
+-- monadio-plus ------------------------
+
+import MonadIO   ( MonadIO )
+
 -- more-unicode ------------------------
 
 import Data.MoreUnicode.Functor  ( (⊳) )
 import Data.MoreUnicode.Lens     ( (⊣) )
 import Data.MoreUnicode.Monad    ( (≫) )
 import Data.MoreUnicode.Monoid   ( ф )
+import Data.MoreUnicode.Text     ( 𝕋 )
 
 -- mtl ---------------------------------
 
@@ -79,6 +86,7 @@ import TinyDNS.Types.TinyDNSData     ( TinyDNSData )
 --------------------------------------------------------------------------------
 
 mkNSCmds ∷ (AsCreateProcError ε, AsExecError ε, AsHostsError ε, AsIOError ε,
+            AsFPathError ε,
             MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
            TinyDNSData → ProcIO ε μ TinyDNSData
 mkNSCmds tinydnsdata = do
@@ -88,7 +96,7 @@ mkNSCmds tinydnsdata = do
 
 ----------------------------------------
 
-mkAliasCmds ∷ (AsCreateProcError ε, AsExecError ε,
+mkAliasCmds ∷ (AsCreateProcError ε, AsExecError ε, AsFPathError ε,
                AsDomainError ε, AsHostsError ε, AsIOError ε,
                MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
               TinyDNSData → ProcIO ε μ TinyDNSData
@@ -102,6 +110,7 @@ mkAliasCmds t = do
 ----------------------------------------
 
 mkMxCmds ∷ (AsExecError ε, AsCreateProcError ε, AsHostsError ε, AsIOError ε,
+            AsFPathError ε,
             MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
            TinyDNSData → ProcIO ε μ TinyDNSData
 
@@ -113,11 +122,11 @@ mkMxCmds tinydnsdata = do
 
 ----------------------------------------
 
-mkData ∷ (AsHostsError ε, AsExecError ε, AsCreateProcError ε,
+mkData ∷ (AsHostsError ε, AsExecError ε, AsCreateProcError ε, AsFPathError ε,
           AsDomainError ε, AsIOError ε,
           MonadIO μ, HasClean α, HasHosts α, MonadReader α μ) ⇒
 
-         ProcIO ε μ (TinyDNSData, ErrTs)
+         ProcIO ε μ (TinyDNSData, [𝕋])
 
 mkData = do
   hs ← lift $ asks (view hosts)
@@ -129,18 +138,14 @@ mkData = do
 
 ----------------------------------------
 
-mkDataHosts ∷ (HasDryRunLevel υ θ, HasVerboseLevel ν θ, MonadIO μ,
-               MonadError ε μ, AsIOError ε, AsDomainError ε,
+mkDataHosts ∷ ∀ ε ρ σ θ υ ν μ .
+              (MonadIO μ, HasDryRunLevel υ θ, HasVerboseLevel ν θ,
+               AsIOError ε, AsDomainError ε, AsFPathError ε,
                AsCreateProcError ε, AsExecError ε, AsHostsError ε,
+               MonadError ε μ,
                HasClean ρ, HasHosts σ) ⇒
-              ρ → σ → θ → μ (TinyDNSData,ErrTs)
+              ρ → σ → θ → μ (TinyDNSData,[𝕋])
 mkDataHosts c hs o = let rContext = RuntimeContext (c ⊣ clean) (hs ⊣ hosts)
                       in flip runReaderT rContext $ doProcIO o mkData
-
-mkDataHosts' ∷ (HasDryRunLevel υ θ, HasVerboseLevel ν θ, MonadIO μ,
-                MonadError HostsDomainExecCreateIOError μ,
-                HasClean ρ, HasHosts σ) ⇒
-               ρ → σ → θ → μ (TinyDNSData,ErrTs)
-mkDataHosts' = mkDataHosts
 
 -- that's all, folks! ----------------------------------------------------------

@@ -1,16 +1,10 @@
-{-# OPTIONS_GHC -Wall #-}
-
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE UnicodeSyntax     #-}
-
 -- base --------------------------------
 
 import Control.Monad           ( forM_, return )
 import Control.Monad.IO.Class  ( MonadIO )
 import Data.Function           ( ($) )
-import Data.Maybe              ( Maybe( Nothing ) )
 import Data.Word               ( Word8 )
+import GHC.Stack               ( HasCallStack )
 import System.IO               ( IO )
 
 -- base-unicode-symbols ----------------
@@ -22,29 +16,34 @@ import Data.Monoid.Unicode    ( (⊕) )
 
 import Data.Textual  ( toText )
 
+-- dhall-plus --------------------------
+
+import DhallPlus.Error  ( AsDhallError )
+
 -- domainnames -------------------------
 
 import DomainNames.Error.DomainError  ( AsDomainError )
 
--- fluffy ------------------------------
+-- fpath -------------------------------
 
-import Fluffy.Dhall.Error  ( AsDhallError )
-import Fluffy.ErrTs        ( toTexts )
-import Fluffy.IO.Error     ( AsIOError )
-import Fluffy.Main         ( doMain )
-import Fluffy.MonadIO      ( warn, writeOut )
-import Fluffy.Options      ( parseOpts )
-import Fluffy.Path         ( getCwd_ )
+import FPath.Error.FPathError  ( AsFPathError )
 
 -- hostsdb -----------------------------
 
 import HostsDB.Hosts             ( loadFile )
 import HostsDB.Error.HostsError  ( AsHostsError )
 
+-- monaderror-io -----------------------
+
+import MonadError.IO.Error  ( AsIOError )
+
+-- monadio-plus ------------------------
+
+import MonadIO  ( liftIO, warn )
+
 -- more-unicode ------------------------
 
 import Data.MoreUnicode.Lens   ( (⊣) )
-import Data.MoreUnicode.Monad  ( (≫) )
 
 -- mtl ---------------------------------
 
@@ -55,32 +54,45 @@ import Control.Monad.Except  ( MonadError )
 import ProcLib.Error.CreateProcError  ( AsCreateProcError )
 import ProcLib.Error.ExecError        ( AsExecError )
 
+-- stdmain -----------------------------
+
+import StdMain  ( stdMainNoDR' )
+
+-- text --------------------------------
+
+import qualified  Data.Text.IO  as  TextIO
+
 ------------------------------------------------------------
 --                     local imports                      --
 ------------------------------------------------------------
 
 import TinyDNS.Error.MkTinyDNSError         ( MkTinyDNSError )
 import TinyDNS.Hosts                        ( mkDataHosts )
-import TinyDNS.Types.MkTinyDNSData.Options  ( input, parseOptions )
+import TinyDNS.Types.MkTinyDNSData.Options  ( Options, input, parseOptions )
 import TinyDNS.Types.Clean                  ( HasClean( clean ) )
 
 --------------------------------------------------------------------------------
 
-myMain ∷ (AsIOError ε, AsDhallError ε, AsDomainError ε, AsHostsError ε,
-          AsExecError ε, AsCreateProcError ε, MonadError ε μ, MonadIO μ) ⇒
-         μ Word8
-myMain = do
-  let descn = "make tiny dns data from hosts config"
-  opts ← getCwd_ ≫ parseOpts Nothing descn ∘ parseOptions
-
+myMain ∷ ∀ ε μ .
+         (MonadIO μ, HasCallStack,
+          AsIOError ε, AsDhallError ε, AsDomainError ε, AsHostsError ε,
+          AsFPathError ε, AsExecError ε, AsCreateProcError ε, MonadError ε μ) ⇒
+         Options → μ Word8
+myMain opts = do
   hs ← loadFile (opts ⊣ input)
 
   (t,es) ← mkDataHosts (opts ⊣ clean) hs opts
-  writeOut (toText t)
-  forM_ (toTexts es) $ warn ∘ ("!ERROR: " ⊕)
+  liftIO $ TextIO.putStr (toText t)
+  forM_ es $ warn ∘ ("!ERROR: " ⊕)
   return 0
 
+
 main ∷ IO ()
-main = doMain $ myMain @MkTinyDNSError
+{-
+main = let go = flip $ const ∘ myMain @MkTinyDNSError
+        in stdMain' none "make tinydns data from hosts config" parseOptions go
+-}
+main = let progDesc = "make tinydns data from hosts config"
+        in stdMainNoDR' progDesc parseOptions (myMain @MkTinyDNSError)
 
 -- that's all, folks! ----------------------------------------------------------

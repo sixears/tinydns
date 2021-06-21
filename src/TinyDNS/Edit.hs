@@ -16,7 +16,7 @@ import Control.Monad.IO.Class  ( MonadIO )
 import Data.Foldable           ( Foldable, toList )
 import Data.Function           ( ($), flip )
 import Data.List               ( sortOn )
-import Data.Maybe              ( Maybe( Just, Nothing ) )
+import Data.Maybe              ( Maybe( Just ) )
 import Data.Tuple              ( snd, uncurry )
 
 -- base-unicode-functions --------------
@@ -33,27 +33,33 @@ import Data.Textual  ( toText )
 import DomainNames.FQDN      ( FQDN )
 import DomainNames.Hostname  ( Hostname )
 
--- fluffy ------------------------------
+-- fpath -------------------------------
 
-import Fluffy.IO.Error      ( AsIOError )
-import Fluffy.IP4           ( IP4 )
-import Fluffy.MonadIO       ( unlink_ )
-import Fluffy.MonadIO.File  ( readFileUTF8, writeFileUtf8 )
-import Fluffy.Path          ( parseAbsFile_ )
-import Fluffy.TempFile      ( mktempf )
+import FPath.AbsFile           ( absfile )
+import FPath.Error.FPathError  ( AsFPathError )
+
+-- ip4 ---------------------------------
+
+import IP4           ( IP4 )
 
 -- lens --------------------------------
 
 import Control.Lens.Getter  ( view )
 
+-- monaderror-io -----------------------
+
+import MonadError.IO.Error      ( AsIOError )
+
+-- monadio-plus ------------------------
+
+import MonadIO.File      ( unlink )
+import MonadIO.OpenFile  ( readFile, writeFile )
+import MonadIO.Temp      ( tempfile )
+
 -- mtl ---------------------------------
 
 import Control.Monad.Reader  ( MonadReader, asks )
 import Control.Monad.Trans   ( lift )
-
--- path --------------------------------
-
-import Path  ( absfile, relfile )
 
 -- proclib -----------------------------
 
@@ -79,7 +85,7 @@ import TinyDNS.Types.TinyDNSData  ( TinyDNSData( TinyDNSData ) )
 
 --------------------------------------------------------------------------------
 
-tinydnsEdit ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+tinydnsEdit ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
                MonadIO μ, HasClean α, MonadReader α μ) ⇒
               CmdArgs → TinyDNSData → ProcIO ε μ TinyDNSData
 
@@ -88,25 +94,23 @@ tinydnsEdit args intxt = do
   let mock1 = [absfile|/tmp/mktinydns.data|]
       mock2 = [absfile|/tmp/mktinydns.data.tmp|]
   (tmp1,tmp2) ← mkIO' (MockLvl 1) (mock1,mock2) "mktmpnames" $ do
-    tmpfn1 ← mktempf [absfile|/tmp/tinydns-data-|] Nothing
-    tmpfn2 ← mktempf [absfile|/tmp/tinydns-data-|] (Just [relfile|.tmp|])
-    let tmp1 = parseAbsFile_ tmpfn1
-        tmp2 = parseAbsFile_ tmpfn2
+    tmp1 ← tempfile ()
+    tmp2 ← tempfile ()
     return (tmp1,tmp2)
 
-  mkIO ([fmt|write: %T|] tmp1) $ writeFileUtf8 tmp1 (toText intxt)
+  mkIO ([fmt|write: %T|] tmp1) $ writeFile (Just 0o755) tmp1 (toText intxt)
   mkProc_ @_ @() $ CmdSpec Paths.tinydns_edit ([toText tmp1,toText tmp2] ⊕ args)
-  outtxt ← mkIO ([fmt|read: %T|] tmp1) $ readFileUTF8 tmp1
+  outtxt ← mkIO ([fmt|read: %T|] tmp1) $ readFile tmp1
 
   -- tmp2 is auto-deleted by tinydns-data
   when (cl ≡ Clean) $
-       mkIO ("clean: " ⊕ toText tmp1) $ unlink_ tmp1 -- ⪼ unlink_ tmp2
+       mkIO ("clean: " ⊕ toText tmp1) $ unlink tmp1 -- ⪼ unlink_ tmp2
 
   return (TinyDNSData outtxt)
 
 ----------------------------------------
 
-addNS ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+addNS ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
          MonadIO μ, HasClean α, MonadReader α μ) ⇒
         FQDN → IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
 
@@ -115,17 +119,18 @@ addNS d ip =
 
 --------------------
 
-addNSen ∷ (Foldable ψ, Foldable φ, AsCreateProcError ε, AsExecError ε,
-           AsIOError ε, MonadIO μ, HasClean α, MonadReader α μ) ⇒
+addNSen ∷ (MonadIO μ,
+           AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
+           Foldable ψ, Foldable φ, HasClean α, MonadReader α μ) ⇒
           φ FQDN → ψ IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
 
-addNSen ds ips tinydnsdata = 
+addNSen ds ips tinydnsdata =
   let go t ds' i = foldM (\ t' d → addNS d i t') t ds'
    in foldM (\ t i → go t ds i) tinydnsdata ips
 
 ----------------------------------------
 
-addHost ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+addHost ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
            MonadIO μ, HasClean α, MonadReader α μ) ⇒
           Hostname → IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
 addHost hn ip =
@@ -133,8 +138,9 @@ addHost hn ip =
 
 --------------------
 
-addHosts ∷ (Foldable ψ, AsCreateProcError ε, AsExecError ε, AsIOError ε,
-            MonadIO μ, HasClean α, MonadReader α μ) ⇒
+addHosts ∷ (MonadIO μ,
+            AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
+            Foldable ψ, HasClean α, MonadReader α μ) ⇒
            ψ (Hostname,IP4) → TinyDNSData → ProcIO ε μ TinyDNSData
 
 addHosts hostList t =
@@ -142,7 +148,7 @@ addHosts hostList t =
 
 ----------------------------------------
 
-addAlias ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+addAlias ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
             MonadIO μ, HasClean α, MonadReader α μ) ⇒
            Hostname → IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
 addAlias name ip =
@@ -150,14 +156,15 @@ addAlias name ip =
 
 --------------------
 
-addAliases ∷ (Foldable ψ, AsCreateProcError ε, AsExecError ε, AsIOError ε,
-              MonadIO μ, HasClean α, MonadReader α μ) ⇒
+addAliases ∷ (MonadIO μ,
+              AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
+              Foldable ψ, HasClean α, MonadReader α μ) ⇒
              ψ (Hostname,IP4) → TinyDNSData → ProcIO ε μ TinyDNSData
 addAliases as t = foldM (flip $ uncurry addAlias) t as
 
 ----------------------------------------
 
-addMx ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε,
+addMx ∷ (AsCreateProcError ε, AsExecError ε, AsIOError ε, AsFPathError ε,
          MonadIO μ, HasClean α, MonadReader α μ) ⇒
         Hostname → IP4 → TinyDNSData → ProcIO ε μ TinyDNSData
 addMx hname ip = tinydnsEdit [ "add", "mx", toText hname, toText ip ]

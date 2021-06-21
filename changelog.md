@@ -1,3 +1,7 @@
+0.1.1.1 2021-06-20
+==================
+- no more fluffy
+
 0.1.1.0 2019-07-14
 ==================
 - massive cleanup, and factor out into upgrades to more-unicode-0.0.6.0,

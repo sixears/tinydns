@@ -2,29 +2,26 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UnicodeSyntax         #-}
 
--- base --------------------------------
-
-import Control.Monad  ( return )
-
 -- base-unicode-symbols ----------------
 
 import Data.Monoid.Unicode  ( (⊕) )
 
--- fluffy ------------------------------
-
-import Fluffy.Applicative  ( (⊵) )
-import Fluffy.ErrTs        ( ErrTs )
-import Fluffy.MonadError   ( splitMError )
-import Fluffy.Nat          ( One )
-import Fluffy.Tasty        ( runTests_, tastyOptParser )
-
--- hostsdb -----------------------------
-
-import HostsDB.Error.HostsError  ( HostsDomainExecCreateIOError )
-
 -- lens --------------------------------
 
 import Control.Lens.Lens  ( Lens', lens )
+
+-- monaderror-io -----------------------
+
+import MonadError   ( splitMError )
+
+-- more-unicode ------------------------
+
+import Data.MoreUnicode.Applicative  ( (⊵) )
+import Data.MoreUnicode.Text         ( 𝕋 )
+
+-- natural -----------------------------
+
+import Natural  ( One )
 
 -- optparse-applicative ----------------
 
@@ -43,16 +40,21 @@ import ProcLib.CommonOpt.Verbose  ( HasVerboseLevel( verboseLevel ), Verbose
 
 import Test.Tasty  ( TestTree, testGroup )
 
+-- tasty-plus --------------------------
+
+import TastyPlus        ( runTests_, tastyOptParser )
+
 ------------------------------------------------------------
 --                     local imports                      --
 ------------------------------------------------------------
 
 import qualified  TinyDNS.T.Hosts
 
-import TinyDNS.Hosts              ( mkDataHosts' )
-import TinyDNS.T.Hosts            ( testHosts )
-import TinyDNS.Types.Clean        ( Clean( Clean ) )
-import TinyDNS.Types.TinyDNSData  ( TinyDNSData )
+import TinyDNS.Error.MkTinyDNSError  ( MkTinyDNSError )
+import TinyDNS.Hosts                 ( mkDataHosts )
+import TinyDNS.T.Hosts               ( testHosts )
+import TinyDNS.Types.Clean           ( Clean( Clean ) )
+import TinyDNS.Types.TinyDNSData     ( TinyDNSData )
 
 --------------------------------------------------------------------------------
 
@@ -77,13 +79,13 @@ instance HasVerboseLevel One Options where
 
 ------------------------------------------------------------
 
-tests ∷ Either HostsDomainExecCreateIOError (TinyDNSData,ErrTs) → TestTree
+tests ∷ Either MkTinyDNSError (TinyDNSData,[𝕋]) → TestTree
 
 tests hs = testGroup "tinydns" [ TinyDNS.T.Hosts.tests hs ]
 
 main ∷ IO ()
 main = do
-  hs ← splitMError $ mkDataHosts' Clean testHosts defOptions
+  hs ← splitMError $ mkDataHosts Clean testHosts defOptions
 
   tastyOpts ← customExecParser (prefs showHelpOnError) $
                 info (helper ⊵ tastyOptParser (tests hs))

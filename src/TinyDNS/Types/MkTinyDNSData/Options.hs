@@ -9,19 +9,14 @@ module TinyDNS.Types.MkTinyDNSData.Options
   ( Options( Options ), input, parseOptions )
 where
 
--- base --------------------------------
-
-import Data.Function  ( ($) )
-import Data.Maybe     ( Maybe( Just ) )
-
 -- base-unicode-symbols ----------------
 
 import Data.Monoid.Unicode    ( (⊕) )
 
--- fluffy ------------------------------
+-- fpath -------------------------------
 
-import Fluffy.Nat    ( One )
-import Fluffy.Path   ( AbsDir, AbsFile, readAbsFile )
+import FPath.File       ( File )
+import FPath.Parseable  ( Parseable( readM ) )
 
 -- lens --------------------------------
 
@@ -31,6 +26,10 @@ import Control.Lens.Lens  ( Lens', lens )
 
 import Data.MoreUnicode.Applicative  ( (⊵) )
 import Data.MoreUnicode.Functor      ( (⊳) )
+
+-- natural -----------------------------
+
+import Natural  ( One )
 
 -- optparse-applicative ----------------
 
@@ -54,7 +53,7 @@ import TinyDNS.Types.Clean  ( HasClean( clean ), Clean( Clean, NoClean ) )
 
 data Options = Options { _dryRun   ∷ DryRun
                        , _verbose  ∷ Verbose
-                       , _input    ∷ AbsFile
+                       , _input    ∷ File
                        , _clean    ∷ Clean
                        }
 
@@ -70,7 +69,7 @@ verbose = lens _verbose (\ o v → o { _verbose = v })
 instance HasVerboseLevel One Options where
   verboseLevel = verbose
 
-input ∷ Lens' Options AbsFile
+input ∷ Lens' Options File
 input = lens _input (\ o i → o { _input = i })
 
 instance HasClean Options where
@@ -78,12 +77,12 @@ instance HasClean Options where
 
 ----------------------------------------
 
-parseOptions ∷ AbsDir → Parser Options
-parseOptions cwd =
+parseOptions ∷ Parser Options
+parseOptions =
   let cleanHelpText = "don't delete intermediate files"
    in Options ⊳ dryRunP
               ⊵ verboseP
-              ⊵ argument (readAbsFile $ Just cwd) (metavar "HOSTS.dhall")
+              ⊵ argument readM (metavar "HOSTS.dhall")
               ⊵ flag Clean NoClean (long "no-clean" ⊕ help cleanHelpText)
 
 -- that's all, folks! ----------------------------------------------------------
