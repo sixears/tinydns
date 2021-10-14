@@ -88,10 +88,6 @@ myMain opts = do
 
 
 main ∷ IO ()
-{-
-main = let go = flip $ const ∘ myMain @MkTinyDNSError
-        in stdMain' none "make tinydns data from hosts config" parseOptions go
--}
 main = let progDesc = "make tinydns data from hosts config"
         in stdMainNoDR' progDesc parseOptions (myMain @MkTinyDNSError)
 
