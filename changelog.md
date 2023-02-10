@@ -1,3 +1,7 @@
+0.1.1.3 2023-02-10
+==================
+- remove src/TinyDNS/Paths.hs (use generated version from proto/)
+
 0.1.1.2 2021-10-13
 ==================
 - upgrade dependencies

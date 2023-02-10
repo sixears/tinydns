@@ -7,7 +7,7 @@ name:                tinydns
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.1.1.2
+version:             0.1.1.3
 
 -- A short (one-line) description of the package.
 synopsis:            tinydns management
@@ -49,7 +49,6 @@ library
   exposed-modules:    TinyDNS.Edit
                     , TinyDNS.Error.MkTinyDNSError
                     , TinyDNS.Hosts, TinyDNS.T.Hosts
-                    , TinyDNS.Paths
                     , TinyDNS.Types.Clean
                     , TinyDNS.Types.MkTinyDNSData.Options
                     , TinyDNS.Types.RuntimeContext
