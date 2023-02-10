@@ -49,6 +49,7 @@ library
   exposed-modules:    TinyDNS.Edit
                     , TinyDNS.Error.MkTinyDNSError
                     , TinyDNS.Hosts, TinyDNS.T.Hosts
+                    , TinyDNS.Paths
                     , TinyDNS.Types.Clean
                     , TinyDNS.Types.MkTinyDNSData.Options
                     , TinyDNS.Types.RuntimeContext
